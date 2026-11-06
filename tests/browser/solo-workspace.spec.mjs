@@ -389,8 +389,7 @@ test.describe("Share access profiles", () => {
       .click();
     const conversation = page.getByRole("article", { name: "Conversation" });
     const share = conversation.getByRole("button", {
-      name: "Share access",
-      exact: true,
+      name: /^Share access to /,
     });
     const actions = conversation.getByRole("button", {
       name: "Chat actions",
@@ -515,8 +514,7 @@ test.describe("Share access profiles", () => {
     });
     const conversation = page.getByRole("article", { name: "Conversation" });
     const share = conversation.getByRole("button", {
-      name: "Share access",
-      exact: true,
+      name: /^Share access to /,
     });
     const sam = page.getByRole("tab", { name: "Sam Rivera", exact: true });
     const profile = page.getByRole("tab", {
