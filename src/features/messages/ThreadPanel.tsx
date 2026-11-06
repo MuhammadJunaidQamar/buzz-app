@@ -28,15 +28,20 @@ import { avatarMedia } from "../../shared/avatar-source";
 import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import {
+  cloneElement,
+  type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
+import { Virtualizer } from "virtua";
+import { stageEdges, ThreadItem } from "./thread-items";
 import { XIcon } from "../../shared/design-system/icons/index";
 import type { ConversationExtensions } from "../conversation/contracts";
 import type { ChannelMessage } from "../relay/contracts";
@@ -1297,6 +1302,42 @@ function ThreadMessages({
     navigation.complete({ status: "failed", reason: failure, presented: true });
   }, [navigation, failure]);
   const [sent, setSent] = useState<string>();
+  // Virtua mounts the top-level replies near the viewport. Rows that must stay
+  // mounted elsewhere: the focused one, and those a row asks for (an open menu,
+  // report or edit).
+  const [focusedId, setFocusedId] = useState<string>();
+  const [pinnedIds, setPinnedIds] = useState<ReadonlyMap<string, number>>(
+    () => new Map(),
+  );
+  const keepRowMounted = useCallback((id: string) => {
+    setPinnedIds((ids) => new Map(ids).set(id, (ids.get(id) ?? 0) + 1));
+    return () =>
+      setPinnedIds((ids) => {
+        const next = new Map(ids);
+        const count = (ids.get(id) ?? 0) - 1;
+        if (count > 0) next.set(id, count);
+        else next.delete(id);
+        return next;
+      });
+  }, []);
+  // The root and its divider sit above the virtual list.
+  const threadRows = useRef<HTMLDivElement>(null);
+  const [listStart, setListStart] = useState(0);
+  useLayoutEffect(() => {
+    const rows = threadRows.current;
+    const list = rows?.querySelector<HTMLElement>(":scope > ol");
+    if (!rows || !list || typeof ResizeObserver === "undefined") return;
+    const measure = () => setListStart(list.offsetTop);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(rows);
+    return () => observer.disconnect();
+  }, []);
+  const committed = useRef<{
+    ids: readonly string[];
+    items: ReadonlyMap<string, ReactElement>;
+  }>({ ids: [], items: new Map() });
+  const [, restage] = useReducer((count: number) => count + 1, 0);
   const [replyFocus, setReplyFocus] = useState(0);
   useEffect(() => {
     if (!joining || (channelAccess !== "member" && channelAccess !== "guest"))
@@ -2011,6 +2052,7 @@ function ThreadMessages({
             layout={continuation ? "continuation" : "thread"}
             compactAvatar={depth > 0}
             retry={session.messages.retry}
+            keepMounted={keepRowMounted}
             {...(canSeekVideo ? { onMediaTime: handleMediaTime } : {})}
             {...(onOpenMediaReview && rootId
               ? { onOpenMediaReview: openRootMedia }
@@ -2055,6 +2097,7 @@ function ThreadMessages({
           }
           className={styles.replyItem}
           data-layout={continuation ? "continuation" : "thread"}
+          data-selected={row.id === messageId || undefined}
         >
           {!parent && row.id === lineRow && (
             <div className={styles.newMessages} data-new-messages-boundary>
@@ -2174,6 +2217,42 @@ function ThreadMessages({
         : plainText(selectedParent?.content ?? ""),
     [selectedParent?.diff, selectedParent?.content],
   );
+  // Virtua's items: each top-level reply with its branch.
+  const replyItems = (
+    renderReplies(undefined) as (ReactElement | null)[]
+  ).filter((item): item is ReactElement => !!item);
+  const nextIds = replyItems.map((item) => String(item.key));
+  const staged = stageEdges(committed.current.ids, nextIds);
+  const current = new Map(replyItems.map((item) => [String(item.key), item]));
+  const listed = staged.ids.flatMap((id) => {
+    const item = current.get(id) ?? committed.current.items.get(id);
+    return item ? [item] : [];
+  });
+  // Kept mounted with their top-level reply: the exact target, an own send
+  // awaiting its reveal, the focused row, rows that asked, and the place a
+  // Back/Forward return restores.
+  const returnAnchor =
+    returning && restoredVisit.current !== navigation?.signal
+      ? (navigation?.position(THREAD_PLACE) as ThreadPlace | undefined)?.anchor
+          ?.id
+      : undefined;
+  const keptIds = new Set(
+    [messageId, sent, focusedId, returnAnchor, ...pinnedIds.keys()].flatMap(
+      (id) => (id ? [tree.ancestors(id).at(-1) ?? id] : []),
+    ),
+  );
+  const keptIndices = listed.flatMap((item, index) =>
+    keptIds.has(String(item.key)) ? [index] : [],
+  );
+  // Every commit records what Virtua was given.
+  useLayoutEffect(() => {
+    committed.current = {
+      ids: listed.map((item) => String(item.key)),
+      items: new Map(listed.map((item) => [String(item.key), item])),
+    };
+    // The start's change is in; the end's follows before paint.
+    if (staged.ids !== nextIds) restage();
+  });
   const captureOlderAnchor = (element: HTMLElement, following = false) => {
     follow.current &&= following;
     const row = [
@@ -2345,6 +2424,17 @@ function ThreadMessages({
           loadNewer();
         }}
         onPointerDown={keepReadingPosition}
+        onFocus={(event) => {
+          const id = event.target
+            .closest("[data-thread-rows] > ol > li")
+            ?.querySelector<HTMLElement>("[data-message-id]")
+            ?.dataset.messageId;
+          setFocusedId(id);
+        }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            setFocusedId(undefined);
+        }}
         onKeyDown={(event) => {
           moveMessageSelection(event);
           if (event.defaultPrevented) return;
@@ -2377,6 +2467,7 @@ function ThreadMessages({
         />
         <MessageContextMenus>
           <div
+            ref={threadRows}
             data-thread-rows=""
             data-activity-history-scope=""
             inert={positioning}
@@ -2439,17 +2530,30 @@ function ThreadMessages({
                 <p className={styles.empty}>Original message unavailable.</p>
               )
             ) : null}
-            <ol>
-              {showOlderPageStatus && snapshot.error && (
-                <li className={styles.threadHistoryPageStatus}>
-                  <p role="alert">{snapshot.error}</p>
-                  <Button type="button" onClick={retryThread}>
-                    Try again
-                  </Button>
-                </li>
+            {showOlderPageStatus && snapshot.error && (
+              <div className={styles.threadHistoryPageStatus}>
+                <p role="alert">{snapshot.error}</p>
+                <Button type="button" onClick={retryThread}>
+                  Try again
+                </Button>
+              </div>
+            )}
+            <Virtualizer
+              scrollRef={scroller}
+              as="ol"
+              item={ThreadItem}
+              shift={staged.shift}
+              bufferSize={1600}
+              keepMounted={keptIndices}
+              startMargin={listStart}
+            >
+              {listed.map((item, index) =>
+                cloneElement(item as ReactElement<Record<string, unknown>>, {
+                  "aria-posinset": index + 1,
+                  "aria-setsize": listed.length,
+                }),
               )}
-              {renderReplies(undefined)}
-            </ol>
+            </Virtualizer>
             {!preview && !positioning && composerRoot && (
               <AgentConnectionSetup
                 key={`${channelId}:${rootId}`}
