@@ -242,6 +242,7 @@ import {
   agentSender,
   attentionChanges,
   type AttentionMigration,
+  compared,
   ensureChannel,
   mirrored,
   ownerSender,
@@ -1592,10 +1593,15 @@ export type Agents = {
    * on this device and the result lists what differs. It also deletes, as the
    * owner, each object in `prune` that only the community holds or could
    * not read: pass the `heads` of the result the owner confirmed, so nothing
-   * added or changed since is deleted. */
+   * added or changed since is deleted. With `adopt`, it publishes nothing
+   * and switches to the community's set as it is now, which becomes the
+   * agent's attention here too (the owner chose the community's). */
   migrateAttention(
     agent: AgentKey,
-    options?: Readonly<{ prune?: Readonly<Record<string, string>> }>,
+    options?: Readonly<{
+      prune?: Readonly<Record<string, string>>;
+      adopt?: boolean;
+    }>,
   ): Promise<AttentionMigration>;
   /** Moves the agent's attention back to this device as its community holds
    * it now, from the copy this session keeps current. Rejects while that copy
@@ -7409,7 +7415,10 @@ export class AgentsService extends Service implements Agents {
   }
   async migrateAttention(
     key: AgentKey,
-    options: Readonly<{ prune?: Readonly<Record<string, string>> }> = {},
+    options: Readonly<{
+      prune?: Readonly<Record<string, string>>;
+      adopt?: boolean;
+    }> = {},
   ): Promise<AttentionMigration> {
     let result: AttentionMigration | undefined;
     await this.change(key, async (saved) => {
@@ -7438,7 +7447,8 @@ export class AgentsService extends Service implements Agents {
         throw new Error("Connect this agent's community to move its attention");
       if (!relayAuthor || !read || !artifacts)
         throw new Error("This community can't store attention");
-      const skipped = Object.keys(saved.skipped ?? {});
+      // The community's set replaces this device's, unreadable records too.
+      const skipped = options.adopt ? [] : Object.keys(saved.skipped ?? {});
       if (skipped.length)
         throw new Error(
           `Fix or remove its unreadable attention first: ${skipped.join(", ")}`,
@@ -7450,6 +7460,14 @@ export class AgentsService extends Service implements Agents {
         query: (filters) => native.query(identity, filters),
         publish: (event) => native.publish(identity, event),
       });
+      if (options.adopt) {
+        const set = await readOnce(
+          (filter) => session.artifacts.sync(filter),
+          channel,
+        );
+        result = { ...compared(saved.attention, set), migrated: true };
+        return { ...mirrored(saved, set), attentionStorage: "relay" };
+      }
       const { set, found } = await publishAll(
         { read, send: ownerSender(artifacts, controller.signal) },
         () => readOnce((filter) => session.artifacts.sync(filter), channel),
