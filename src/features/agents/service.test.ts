@@ -14734,6 +14734,7 @@ async function relayAttentionSetup(
             }
           },
         },
+        artifactSync: true,
         artifacts: {
           sync: () => {
             const listeners = new Set<() => void>();
