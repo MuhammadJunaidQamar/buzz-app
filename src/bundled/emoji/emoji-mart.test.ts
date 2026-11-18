@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { SearchIndex } from "emoji-mart";
+import { FrequentlyUsed, SearchIndex } from "emoji-mart";
 import { afterEach, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { mountEmojiMart } from "./emoji-mart";
@@ -7,8 +7,55 @@ import { PREVIEW_ACTION_SLOT } from "./add-emoji";
 import { SKIN_TONE_SLOT } from "./skin-tone";
 
 afterEach(() => {
+  vi.useRealTimers();
   document.body.replaceChildren();
   vi.unstubAllGlobals();
+});
+
+it("cancels Mart's pending theme update when the picker closes", async () => {
+  for (const name of ["ResizeObserver", "IntersectionObserver"])
+    vi.stubGlobal(
+      name,
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+  // Frequent names the custom emoji that dispose() deletes from Mart's Data.
+  const id = "buzz-custom/fixture/stamp";
+  FrequentlyUsed.add({ id });
+  const host = document.body.appendChild(document.createElement("div"));
+  const dispose = mountEmojiMart({
+    host,
+    autoFocus: false,
+    scope: "fixture",
+    perLine: 8,
+    emojiSize: 24,
+    emojiButtonSize: 36,
+    search: "",
+    searchSelection: { current: undefined },
+    searchChange() {},
+    entries: [{ shortcode: "stamp", url: "https://a.test/stamp.png" }],
+    media: (url) => url,
+    select() {},
+    close() {},
+  });
+  const picker = host.querySelector("em-emoji-picker") as HTMLElement & {
+    component?: object;
+  };
+  await vi.waitFor(() => {
+    if (!picker.shadowRoot?.querySelector(`button[title=":stamp:"]`))
+      throw new Error("Frequent has not rendered the custom emoji");
+  });
+  vi.useFakeTimers();
+  const theme = picker.getAttribute("theme") === "dark" ? "light" : "dark";
+  picker.setAttribute("theme", theme);
+  // The private field dispose() clears; a rename must fail here, not in CI.
+  expect(picker.component).toHaveProperty("nextStateTimer");
+  dispose();
+  expect(vi.getTimerCount()).toBe(0);
+  expect(() => vi.runAllTimers()).not.toThrow();
 });
 
 it("adds fuzzy shortcode matches after Mart's own results", async () => {

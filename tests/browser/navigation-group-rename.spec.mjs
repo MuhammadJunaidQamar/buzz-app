@@ -229,14 +229,29 @@ test("section emoji edits are centered, keyboard-safe, independently removable a
   });
   await page.setViewportSize({ width: 1440, height: 950 });
   await expectPickerBelow(dialog, picker);
-  // A Tab re-marks keyboard navigation, and Mart applies the picker's echoed
-  // attributes on a timer. Closing in the same task makes that timer fire after
-  // the picker drops its custom emoji, which Frequent still lists (`:stamp:`).
-  await remove.evaluate(async (button) => {
-    document.documentElement.dataset.keyboardNavigation = "";
-    await Promise.resolve();
+  // Mart applies attribute changes on a timer. A theme change that lands just
+  // before closing makes that timer fire after the picker drops its custom
+  // emoji, which Frequent still lists (`:stamp:`). The keyboard-navigation mark
+  // no longer re-sets an unchanged theme, so flip the theme itself and close in
+  // the same task. The hover keeps a pointer actionability check on Remove.
+  await remove.hover();
+  const closedBeforeMartTimer = await remove.evaluate(async (button) => {
+    const mart = button.ownerDocument.querySelector("em-emoji-picker");
+    // Armed first, this 0 ms timer runs just before the one Mart arms below.
+    const beforeMart = new Promise((resolve) => setTimeout(resolve));
+    mart?.setAttribute(
+      "theme",
+      mart.getAttribute("theme") === "dark" ? "light" : "dark",
+    );
     button.click();
+    // A real click's pointerdown clears the mark; keep the journey in that state.
+    delete button.ownerDocument.documentElement.dataset.keyboardNavigation;
+    await beforeMart;
+    return mart !== null && !mart.isConnected;
   });
+  // If teardown were deferred past Mart's timer, the timer would render while
+  // the emoji still exist, and this step would stop reproducing the race.
+  expect(closedBeforeMartTimer).toBe(true);
   await expect(picker).toHaveCount(0);
   await expect(input).toHaveValue("Work");
   await expect(
