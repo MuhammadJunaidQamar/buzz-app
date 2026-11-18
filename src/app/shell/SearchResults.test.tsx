@@ -4916,6 +4916,11 @@ it.each(["cancel", "fail"])(
 );
 
 it("offers every scoped alias match when completion is ambiguous", async () => {
+  // Three search debounces chain before the picker answers: message search,
+  // its re-resolution once the member's verified name lands, then the author
+  // lookup. In real time they fill a wait's one-second default, so the clock
+  // is controlled.
+  vi.useFakeTimers();
   const { owner, person, reads } = verifiedAuthorSession({
     profileName: "alice",
     namesakeName: "alice",
@@ -4936,13 +4941,15 @@ it("offers every scoped alias match when completion is ambiguous", async () => {
         openConversation={() => {}}
       />,
     );
-    await waitFor(() =>
-      expect(
-        within(screen.getByRole("group", { name: "People" })).getAllByRole(
-          "option",
-        ),
-      ).toHaveLength(2),
-    );
+    for (let step = 0; step < 3; step += 1)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+      });
+    expect(
+      within(screen.getByRole("group", { name: "People" })).getAllByRole(
+        "option",
+      ),
+    ).toHaveLength(2);
     expect(reads).toEqual([]);
     fireEvent.click(
       screen.getByRole("option", {
