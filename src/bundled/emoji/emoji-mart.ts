@@ -870,6 +870,14 @@ ${[1, 2, 3, 4, 5, 6].map((tone) => `    .menu .skin-tone-${tone}::before { conte
     // Base UI's removal recovery can reclaim it after the new picker mounts.
     if (root?.activeElement) host.focus({ preventScroll: true });
     picker.remove(); // unregisters Mart's document listeners and observers
+    // Mart applies attribute changes, including the theme `syncAppearance`
+    // re-sets on every keyboard-navigation mark, on a timer. If that timer fired
+    // now, the detached picker would re-render a Frequent row that names custom
+    // emoji deleted below, and the render would throw.
+    clearTimeout(
+      (picker as { component?: { nextStateTimer?: number } }).component
+        ?.nextStateTimer,
+    );
     for (const id of values.keys()) delete Data?.emojis[id];
     if (Data) {
       Data.categories = Data.categories.filter(

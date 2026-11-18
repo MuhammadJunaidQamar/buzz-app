@@ -229,7 +229,14 @@ test("section emoji edits are centered, keyboard-safe, independently removable a
   });
   await page.setViewportSize({ width: 1440, height: 950 });
   await expectPickerBelow(dialog, picker);
-  await remove.click();
+  // A Tab re-marks keyboard navigation, and Mart applies the picker's echoed
+  // attributes on a timer. Closing in the same task makes that timer fire after
+  // the picker drops its custom emoji, which Frequent still lists (`:stamp:`).
+  await remove.evaluate(async (button) => {
+    document.documentElement.dataset.keyboardNavigation = "";
+    await Promise.resolve();
+    button.click();
+  });
   await expect(picker).toHaveCount(0);
   await expect(input).toHaveValue("Work");
   await expect(
