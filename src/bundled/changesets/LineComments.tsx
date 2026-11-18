@@ -72,7 +72,8 @@ export function CommentableDiff({
   const opener = useRef<HTMLButtonElement | null>(null);
   const [failure, setFailure] = useState<string>();
   // The one line number in the Tab order; arrow keys move it.
-  const [stop, setStop] = useState<string>();
+  // Kept out of state so moving it doesn't render the whole diff again.
+  const stop = useRef<string>(undefined);
   if (!files || !changes?.length)
     return <DiffViewer content={content} files={files} filePath={path} />;
   const low = pick && Math.min(pick.from, pick.to);
@@ -141,7 +142,7 @@ export function CommentableDiff({
       />,
     );
   const first = changes[0];
-  const tabStop = stop ?? (first && getChangeKey(first));
+  const tabStop = stop.current ?? (first && getChangeKey(first));
   const renderGutter = ({ change, side, renderDefault }: GutterOptions) => {
     // One target per row: removed lines by their old number, the rest by
     // their number now.
@@ -159,7 +160,17 @@ export function CommentableDiff({
         className={styles.line}
         data-change={key}
         tabIndex={key === tabStop ? 0 : -1}
-        onFocus={() => setStop(key)}
+        onFocus={(event) => {
+          if (stop.current === key) return;
+          for (const other of event.currentTarget
+            .closest("table")
+            ?.querySelectorAll<HTMLButtonElement>(
+              'button[data-change][tabindex="0"]',
+            ) ?? [])
+            other.tabIndex = -1;
+          event.currentTarget.tabIndex = 0;
+          stop.current = key;
+        }}
         onKeyDown={(event) => {
           if (event.key === "Enter" && event.shiftKey) {
             event.preventDefault();
@@ -243,7 +254,11 @@ function NewComment({
         add();
       }}
     >
-      <Field label={label} error={failure}>
+      <Field
+        label={label}
+        description="Posted in this chat for the agent, with the lines it points at."
+        error={failure}
+      >
         <Textarea
           autoFocus
           rows={3}

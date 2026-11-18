@@ -64,7 +64,14 @@ export function ChangesetPanel({
   const pending = listed.error === undefined && !files;
   const step = (by: number) => files && setChosen(files[index + by]?.path);
   const post = (comment: Omit<LineComment, "id">) =>
-    send(found.turn, formatComment(found.checkout.dir, comment));
+    send(
+      found.turn,
+      formatComment(
+        found.checkout.dir.split(/[\\/]/).filter(Boolean).at(-1) ??
+          found.checkout.dir,
+        comment,
+      ),
+    );
   return (
     <div className={styles.panel}>
       <InlineHeader

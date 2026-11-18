@@ -85,7 +85,7 @@ it("sends each comment on a range of lines to the turn's agent at once", async (
   await comment("Comment on line 1", "Comment on line 2", "Rename this");
   expect(send).toHaveBeenLastCalledWith(
     turn,
-    "Comment on `a.txt` lines 1-2, in `/work/app`:\n```diff\n keep\n-old\n+new\n```\nRename this",
+    "Comment on `a.txt` lines 1-2, in `app`:\n```diff\n keep\n-old\n+new\n```\nRename this",
   );
   expect(
     screen.getByRole("region", { name: "Comment on lines 1-2" }),
@@ -94,7 +94,7 @@ it("sends each comment on a range of lines to the turn's agent at once", async (
   await comment("Comment on removed line 2", undefined, "Keep `old`");
   expect(send).toHaveBeenLastCalledWith(
     turn,
-    "Comment on `a.txt` removed line 2, in `/work/app`:\n```diff\n-old\n```\nKeep `old`",
+    "Comment on `a.txt` removed line 2, in `app`:\n```diff\n-old\n```\nKeep `old`",
   );
   expect(comments.list("t1:0")).toHaveLength(2);
 });
@@ -186,4 +186,24 @@ it("extends a comment's range with Shift+Enter", async () => {
   expect(
     screen.getByRole("textbox", { name: "Comment on lines 1-2" }),
   ).toBeInTheDocument();
+});
+
+it("keeps quoted lines short and code spans whole", () => {
+  expect(
+    formatComment("my`app", {
+      path: "a`b.ts",
+      keys: [],
+      lines: "line 1",
+      code: [`+${"x".repeat(400)}`],
+      text: "Hi",
+    }),
+  ).toBe(
+    [
+      "Comment on `` a`b.ts `` line 1, in `` my`app ``:",
+      "```diff",
+      `+${"x".repeat(299)} …`,
+      "```",
+      "Hi",
+    ].join("\n"),
+  );
 });
