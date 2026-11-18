@@ -75,6 +75,8 @@
   --diff-code-delete-edit-background-color: var(--affordance-danger);
   --diff-omit-gutter-line-color: var(--border-standard);
   --diff-selection-background-color: var(--affordance-selected);
+  --diff-gutter-selected-background-color: var(--affordance-selected);
+  --diff-code-selected-background-color: var(--affordance-selected);
   display: grid;
   gap: var(--space-3);
 }

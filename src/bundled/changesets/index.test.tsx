@@ -10,7 +10,7 @@ const context = (spawn?: () => Promise<never>) => ({
   host: { spawn },
   effect: vi.fn(),
   relay: { snapshot: vi.fn(), subscribe: vi.fn() },
-  conversation: { registerAccessory: vi.fn() },
+  conversation: { registerAccessory: vi.fn(), registerTool: vi.fn() },
   panels: { register: vi.fn() },
 });
 const run = (ctx: ReturnType<typeof context>) =>
@@ -24,6 +24,7 @@ it("does nothing in the browser", () => {
   expect(ctx.effect).not.toHaveBeenCalled();
   expect(ctx.conversation.registerAccessory).not.toHaveBeenCalled();
   expect(ctx.panels.register).not.toHaveBeenCalled();
+  expect(ctx.conversation.registerTool).not.toHaveBeenCalled();
   expect(ctx.relay.subscribe).not.toHaveBeenCalled();
   expect(spawn).not.toHaveBeenCalled();
 });
@@ -35,7 +36,7 @@ it("does nothing on a desktop without process support", () => {
   expect(ctx.conversation.registerAccessory).not.toHaveBeenCalled();
 });
 
-it("adds the card and its panel on desktop", () => {
+it("adds the card, its panel and the comments' composer bridge on desktop", () => {
   vi.mocked(isTauri).mockReturnValue(true);
   const ctx = context(vi.fn() as never);
   run(ctx);
@@ -49,5 +50,8 @@ it("adds the card and its panel on desktop", () => {
     ),
   ).toBe(true);
   expect(panel.matches("https://example.com/")).toBe(false);
+  expect(ctx.conversation.registerTool).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "comments" }),
+  );
   expect(ctx.effect).toHaveBeenCalledOnce();
 });

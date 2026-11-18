@@ -1,4 +1,4 @@
-import { Diff, Hunk, type FileData } from "react-diff-view";
+import { Diff, Hunk, type DiffProps, type FileData } from "react-diff-view";
 import "react-diff-view/style/index.css";
 import { diffType, fileLabel, labels } from "./parse";
 import styles from "./Diffs.module.css";
@@ -8,11 +8,14 @@ export function DiffViewer({
   files,
   filePath,
   viewType = "unified",
+  annotate,
 }: {
   content: string;
   files: FileData[] | undefined;
   filePath?: string | undefined;
   viewType?: "unified" | "split";
+  /** Rows under lines, highlighted lines and line-number gutters. */
+  annotate?: Pick<DiffProps, "widgets" | "selectedChanges" | "renderGutter">;
 }) {
   if (!files)
     return (
@@ -64,6 +67,7 @@ export function DiffViewer({
                 diffType={type}
                 hunks={file.hunks}
                 viewType={viewType}
+                {...annotate}
               >
                 {(hunks) =>
                   hunks.map((hunk) => (

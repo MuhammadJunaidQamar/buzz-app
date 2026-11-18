@@ -1069,9 +1069,12 @@ and are asked to sign in again in Buzz.
 - **Changesets** is an optional desktop plugin, off by default. When a local
   agent finishes a turn in a chat with project folders, a card under its last
   message lists the files it changed, with added and removed lines. Only you
-  see it. Choose a file to open its diff beside the chat. It skips agents on
-  other computers and remote agents, and keeps the latest 300 turns on this
-  device.
+  see it. Choose a file to open its diff beside the chat. In the diff, choose
+  a line number to comment on that line, or Shift-click a second one to cover
+  the lines between. **Add to message** puts every comment, with the file,
+  lines and code it points at, in that chat's composer to review and send. It
+  skips agents on other computers and remote agents, and keeps the latest 300
+  turns on this device.
 - **Activity preview**: with a mouse or trackpad, rest the pointer on
   **Activity** in the Messages sidebar to see recent mentions, DMs, thread replies, and reactions
   without opening the Activity page. Clicking a conversation opens it directly;

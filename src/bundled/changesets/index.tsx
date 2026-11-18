@@ -1,6 +1,8 @@
 import { isTauri } from "@tauri-apps/api/core";
 import type { PluginModule } from "../../plugins/api";
 import { createGit } from "./git";
+import { createComments } from "./comments";
+import { ComposerBridge } from "./LineComments";
 import { ChangesetPanel } from "./Panel";
 import { TurnCards } from "./Card";
 import { parseTarget } from "./target";
@@ -11,6 +13,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
   const { host } = ctx;
   if (!isTauri() || !host.spawn) return;
   const turns = createTurns(createGit(host.spawn.bind(host)));
+  const comments = createComments();
   ctx.effect(() => {
     let release: (() => void) | undefined;
     let bound: unknown;
@@ -41,6 +44,13 @@ export const apply: PluginModule["apply"] = (ctx) => {
     id: "changes",
     title: "Changes",
     matches: (url) => !!parseTarget(url),
-    component: ({ target }) => <ChangesetPanel target={target} turns={turns} />,
+    component: ({ target }) => (
+      <ChangesetPanel target={target} turns={turns} comments={comments} />
+    ),
+  });
+  ctx.conversation.registerTool({
+    id: "comments",
+    title: "Changeset comments",
+    component: (props) => <ComposerBridge {...props} comments={comments} />,
   });
 };

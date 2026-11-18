@@ -10,6 +10,7 @@ import {
 import { afterEach, expect, it, vi } from "vitest";
 import type { ComposerAccessoryProps } from "../../features/conversation/contracts";
 import { TurnCards } from "./Card";
+import { createComments } from "./comments";
 import { type ChangedFile, Unreadable } from "./git";
 import { ChangesetPanel } from "./Panel";
 import { targetFor } from "./target";
@@ -156,7 +157,13 @@ it("explains a changeset that cannot be read and tries again", async () => {
 
 it("reads a turn's files and shows the chosen file's diff in the panel", async () => {
   const turns = fakeTurns();
-  render(<ChangesetPanel target={targetFor("t1", 0, "a.txt")} turns={turns} />);
+  render(
+    <ChangesetPanel
+      comments={createComments()}
+      target={targetFor("t1", 0, "a.txt")}
+      turns={turns}
+    />,
+  );
   await waitFor(() => expect(turns.patch).toHaveBeenCalled());
   expect(await screen.findByText("two")).toBeInTheDocument();
   expect(screen.getByText(/2 files changed/)).toBeInTheDocument();
@@ -169,7 +176,13 @@ it("reads a turn's files and shows the chosen file's diff in the panel", async (
 
 it("steps to a binary file and says there is no text diff", async () => {
   const turns = fakeTurns();
-  render(<ChangesetPanel target={targetFor("t1", 0, "a.txt")} turns={turns} />);
+  render(
+    <ChangesetPanel
+      comments={createComments()}
+      target={targetFor("t1", 0, "a.txt")}
+      turns={turns}
+    />,
+  );
   await screen.findByText("two");
   fireEvent.click(screen.getByRole("button", { name: "Next file" }));
   expect(await screen.findByText(/Binary file/)).toBeInTheDocument();
@@ -179,6 +192,7 @@ it("steps to a binary file and says there is no text diff", async () => {
 it("says a patch is too big and does not offer to try again", async () => {
   render(
     <ChangesetPanel
+      comments={createComments()}
       target={targetFor("t1", 0, "a.txt")}
       turns={fakeTurns({
         patch: async () => {
@@ -200,6 +214,7 @@ it("offers to try again after a failure that may pass", async () => {
     .mockResolvedValue(PATCH);
   render(
     <ChangesetPanel
+      comments={createComments()}
       target={targetFor("t1", 0, "a.txt")}
       turns={fakeTurns({ patch })}
     />,
@@ -214,7 +229,11 @@ it("does not offer to try again on a binary file or a snapshot git cleaned up", 
     summary: async () => [file("b.bin", { binary: true })],
   });
   const view = render(
-    <ChangesetPanel target={targetFor("t1", 0, "b.bin")} turns={turns} />,
+    <ChangesetPanel
+      comments={createComments()}
+      target={targetFor("t1", 0, "b.bin")}
+      turns={turns}
+    />,
   );
   expect(await screen.findByText(/Binary file/)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
@@ -238,6 +257,7 @@ it("does not offer to try again on a binary file or a snapshot git cleaned up", 
 it("says so for a changeset another Buzz recorded", () => {
   render(
     <ChangesetPanel
+      comments={createComments()}
       target={targetFor("t9", 0)}
       turns={fakeTurns({ find: () => undefined })}
     />,
