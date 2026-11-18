@@ -1,7 +1,6 @@
 import {
   type FormEvent,
   type ReactNode,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -15,11 +14,8 @@ import {
   computeOldLineNumber,
   getChangeKey,
 } from "react-diff-view";
-import type { ComposerToolProps } from "../../features/conversation/contracts";
-import { TrashIcon } from "../../shared/design-system/icons";
 import { Button } from "../../shared/design-system/ui/Button";
 import { Field } from "../../shared/design-system/ui/Field";
-import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Textarea } from "../../shared/design-system/ui/Textarea";
 import { DiffViewer } from "../diffs/DiffViewer";
 import type { Comments, LineComment } from "./comments";
@@ -41,13 +37,15 @@ const marker = (change: ChangeData) =>
   change.type === "insert" ? "+" : change.type === "delete" ? "-" : " ";
 
 /** One file's diff whose lines take comments: choose a line number, or
- * Shift-choose another to cover the lines between. */
+ * Shift-choose another to cover the lines between. Each comment goes to the
+ * agent as soon as it is made. */
 export function CommentableDiff({
   content,
   files,
   path,
   comments,
   draft,
+  send,
 }: {
   content: string;
   files: FileData[] | undefined;
@@ -55,6 +53,8 @@ export function CommentableDiff({
   comments: Comments;
   /** The changeset the comments belong to. */
   draft: string;
+  /** Sends a comment to the agent; throws with the reason it could not. */
+  send(comment: Omit<LineComment, "id">): void;
 }) {
   const saved = useSyncExternalStore(comments.subscribe, () =>
     comments.list(draft),
@@ -69,6 +69,7 @@ export function CommentableDiff({
   const typed = useRef("");
   // The line number that opened the field, which takes focus back.
   const opener = useRef<HTMLButtonElement | null>(null);
+  const [failure, setFailure] = useState<string>();
   if (!files || !changes?.length)
     return <DiffViewer content={content} files={files} filePath={path} />;
   const low = pick && Math.min(pick.from, pick.to);
@@ -83,25 +84,36 @@ export function CommentableDiff({
     const at = changes.indexOf(change);
     if (at < 0) return;
     opener.current = from;
+    setFailure(undefined);
     setPick(
       extend && pick ? { from: pick.from, to: at } : { from: at, to: at },
     );
   };
   const cancel = () => {
     setPick(undefined);
+    setFailure(undefined);
     typed.current = "";
     opener.current?.focus();
   };
   const add = () => {
     const text = typed.current;
     if (!picked.length || !text.trim()) return;
-    comments.add(draft, {
+    const comment = {
       path,
       keys: picked.map(getChangeKey),
       lines: describeLines(picked),
       code: picked.map((change) => `${marker(change)}${change.content}`),
       text: text.trim(),
-    });
+    };
+    try {
+      send(comment);
+    } catch (error) {
+      setFailure(
+        error instanceof Error ? error.message : "Couldn't send the comment.",
+      );
+      return;
+    }
+    comments.add(draft, comment);
     cancel();
   };
   const widgets: Record<string, ReactNode[]> = {};
@@ -110,15 +122,7 @@ export function CommentableDiff({
   };
   for (const comment of saved) {
     const key = comment.path === path ? comment.keys.at(-1) : undefined;
-    if (key)
-      place(
-        key,
-        <SavedComment
-          key={comment.id}
-          comment={comment}
-          remove={() => comments.remove(draft, comment.id)}
-        />,
-      );
+    if (key) place(key, <SentComment key={comment.id} comment={comment} />);
   }
   const anchor = picked.at(-1);
   if (anchor)
@@ -128,6 +132,7 @@ export function CommentableDiff({
         key="new"
         label={`Comment on ${describeLines(picked)}`}
         typed={typed}
+        failure={failure}
         cancel={cancel}
         add={add}
       />,
@@ -178,11 +183,13 @@ export function CommentableDiff({
 function NewComment({
   label,
   typed,
+  failure,
   cancel,
   add,
 }: {
   label: string;
   typed: { current: string };
+  failure: string | undefined;
   cancel(): void;
   add(): void;
 }) {
@@ -195,7 +202,7 @@ function NewComment({
         add();
       }}
     >
-      <Field label={label}>
+      <Field label={label} error={failure}>
         <Textarea
           autoFocus
           rows={3}
@@ -224,59 +231,21 @@ function NewComment({
           Cancel
         </Button>
         <Button size="sm" variant="primary" type="submit" disabled={empty}>
-          Comment
+          Send
         </Button>
       </div>
     </form>
   );
 }
 
-function SavedComment({
-  comment,
-  remove,
-}: {
-  comment: LineComment;
-  remove(): void;
-}) {
+function SentComment({ comment }: { comment: LineComment }) {
   return (
     <section
       className={styles.comment}
       aria-label={`Comment on ${comment.lines}`}
     >
-      <div className={styles.commentHead}>
-        <span className={styles.note}>{comment.lines}</span>
-        <IconButton
-          aria-label="Remove comment"
-          icon={<TrashIcon size={16} aria-hidden="true" />}
-          onClick={remove}
-        />
-      </div>
+      <span className={styles.note}>{comment.lines} · Sent to the agent</span>
       <p className={styles.commentText}>{comment.text}</p>
     </section>
   );
-}
-
-/** Renders nothing: while a conversation's composer is open, it can take the
- * comments its changesets send. */
-export function ComposerBridge({
-  comments,
-  channelId,
-  threadRootId,
-  insertText,
-  focus,
-}: ComposerToolProps & { comments: Comments }) {
-  useEffect(
-    () =>
-      comments.attach({
-        channelId,
-        thread: threadRootId,
-        insert(text) {
-          if (!insertText(text)) return false;
-          focus();
-          return true;
-        },
-      }),
-    [comments, channelId, threadRootId, insertText, focus],
-  );
-  return null;
 }

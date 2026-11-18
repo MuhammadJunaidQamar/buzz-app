@@ -1071,8 +1071,9 @@ and are asked to sign in again in Buzz.
   message lists the files it changed, with added and removed lines. Only you
   see it. Choose a file to open its diff beside the chat. In the diff, choose
   a line number to comment on that line, or Shift-click a second one to cover
-  the lines between. **Add to message** puts every comment, with the file,
-  lines and code it points at, in that chat's composer to review and send. It
+  the lines between. **Send** posts the comment to that agent right away, in
+  the chat or thread where it worked, with the file, lines and code it points
+  at. It
   skips agents on other computers and remote agents, and keeps the latest 300
   turns on this device.
 - **Activity preview**: with a mouse or trackpad, rest the pointer on

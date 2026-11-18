@@ -1,16 +1,8 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ComposerToolProps } from "../../features/conversation/contracts";
-import { createComments, formatComments } from "./comments";
-import { ComposerBridge } from "./LineComments";
+import { createComments, formatComment } from "./comments";
 import { ChangesetPanel } from "./Panel";
 import { targetFor } from "./target";
 import type { Turn, Turns } from "./turns";
@@ -64,12 +56,14 @@ const turns = {
   find: () => ({ turn, checkout: turn.checkouts[0] }),
 } as unknown as Turns;
 
-function panel(comments = createComments()) {
+function panel(send: (turn: Turn, text: string) => void = vi.fn()) {
+  const comments = createComments();
   render(
     <ChangesetPanel
       target={targetFor("t1", 0, "a.txt")}
       turns={turns}
       comments={comments}
+      send={send}
     />,
   );
   return comments;
@@ -82,82 +76,69 @@ async function comment(from: string, to: string | undefined, text: string) {
       shiftKey: true,
     });
   fireEvent.change(screen.getByRole("textbox"), { target: { value: text } });
-  fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
 }
 
-it("adds comments on a range of lines to the chat's composer as one prompt", async () => {
-  const comments = panel();
-  const insert = vi.fn(() => true);
-  comments.attach({ channelId: "other", thread: undefined, insert });
-  const here = vi.fn(() => true);
-  comments.attach({ channelId: "c", thread: undefined, insert: here });
+it("sends each comment on a range of lines to the turn's agent at once", async () => {
+  const send = vi.fn();
+  const comments = panel(send);
   await comment("Comment on line 1", "Comment on line 2", "Rename this");
-  await comment("Comment on removed line 2", undefined, "Keep `old`");
+  expect(send).toHaveBeenLastCalledWith(
+    turn,
+    "Comment on `a.txt` lines 1-2, in `/work/app`:\n```diff\n keep\n-old\n+new\n```\nRename this",
+  );
   expect(
     screen.getByRole("region", { name: "Comment on lines 1-2" }),
-  ).toHaveTextContent("Rename this");
-  expect(screen.getByText("2 comments")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
-  expect(insert).not.toHaveBeenCalled();
-  expect(here).toHaveBeenCalledWith(
-    [
-      "Comments on the changes in `/work/app`:",
-      "`a.txt` lines 1-2:\n```diff\n keep\n-old\n+new\n```\nRename this",
-      "`a.txt` removed line 2:\n```diff\n-old\n```\nKeep `old`",
-    ].join("\n\n"),
+  ).toHaveTextContent("Sent to the agent");
+  expect(screen.queryByRole("textbox")).toBeNull();
+  await comment("Comment on removed line 2", undefined, "Keep `old`");
+  expect(send).toHaveBeenLastCalledWith(
+    turn,
+    "Comment on `a.txt` removed line 2, in `/work/app`:\n```diff\n-old\n```\nKeep `old`",
   );
-  expect(screen.queryByText("2 comments")).toBeNull();
+  expect(comments.list("t1:0")).toHaveLength(2);
 });
 
-it("keeps the comments and says so when the chat's composer is not open", async () => {
-  const comments = panel();
+it("keeps the comment open and says why when it can't be sent", async () => {
+  const comments = panel(() => {
+    throw new Error(
+      "Switch to the community and account this changeset was recorded in, then try again.",
+    );
+  });
   await comment("Comment on line 2", undefined, "Why?");
-  fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
-  expect(screen.getByRole("alert")).toHaveTextContent(
-    "Couldn't add the comments",
-  );
-  expect(comments.list("t1:0")).toHaveLength(1);
+  expect(screen.getByRole("textbox")).toHaveValue("Why?");
+  expect(screen.getByText(/Switch to the community/)).toBeInTheDocument();
+  expect(comments.list("t1:0")).toHaveLength(0);
 });
 
-it("cancels a comment with Escape and removes a saved one", async () => {
-  panel();
+it("cancels a comment with Escape and sends nothing", async () => {
+  const send = vi.fn();
+  panel(send);
   fireEvent.click(
     await screen.findByRole("button", { name: "Comment on line 3" }),
   );
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
   expect(
     screen.getByRole("button", { name: "Comment on line 3" }),
   ).toHaveFocus();
   expect(screen.queryByRole("textbox")).toBeNull();
-  await comment("Comment on line 3", undefined, "Drop it");
-  const saved = screen.getByRole("region", { name: "Comment on line 3" });
-  fireEvent.click(
-    within(saved).getByRole("button", { name: "Remove comment" }),
-  );
-  expect(
-    screen.queryByRole("region", { name: "Comment on line 3" }),
-  ).toBeNull();
-  expect(screen.queryByRole("button", { name: "Add to message" })).toBeNull();
+  expect(send).not.toHaveBeenCalled();
 });
 
 it("fences quoted code past its own backticks and shortens long quotes", () => {
   const code = ["+```js", ...Array.from({ length: 8 }, (_, i) => `+${i}`)];
   expect(
-    formatComments("/w", [
-      {
-        id: "0",
-        path: "a.md",
-        keys: [],
-        lines: "lines 1-9",
-        code,
-        text: " Hi ",
-      },
-    ]),
+    formatComment("/w", {
+      path: "a.md",
+      keys: [],
+      lines: "lines 1-9",
+      code,
+      text: " Hi ",
+    }),
   ).toBe(
     [
-      "Comments on the changes in `/w`:",
-      "",
-      "`a.md` lines 1-9:",
+      "Comment on `a.md` lines 1-9, in `/w`:",
       "````diff",
       "+```js",
       "+0",
@@ -170,26 +151,4 @@ it("fences quoted code past its own backticks and shortens long quotes", () => {
       "Hi",
     ].join("\n"),
   );
-});
-
-it("lets an open composer take comments until it closes", () => {
-  const comments = createComments();
-  const insertText = vi.fn(() => true);
-  const focus = vi.fn();
-  const view = render(
-    <ComposerBridge
-      {...({
-        channelId: "c",
-        insertText,
-        focus,
-      } as unknown as ComposerToolProps)}
-      comments={comments}
-    />,
-  );
-  expect(comments.deliver("c", undefined, "hi")).toBe(true);
-  expect(insertText).toHaveBeenCalledWith("hi");
-  expect(focus).toHaveBeenCalled();
-  expect(comments.deliver("c", "root", "hi")).toBe(false);
-  view.unmount();
-  expect(comments.deliver("c", undefined, "hi")).toBe(false);
 });

@@ -160,6 +160,7 @@ it("reads a turn's files and shows the chosen file's diff in the panel", async (
   render(
     <ChangesetPanel
       comments={createComments()}
+      send={() => {}}
       target={targetFor("t1", 0, "a.txt")}
       turns={turns}
     />,
@@ -179,6 +180,7 @@ it("steps to a binary file and says there is no text diff", async () => {
   render(
     <ChangesetPanel
       comments={createComments()}
+      send={() => {}}
       target={targetFor("t1", 0, "a.txt")}
       turns={turns}
     />,
@@ -193,6 +195,7 @@ it("says a patch is too big and does not offer to try again", async () => {
   render(
     <ChangesetPanel
       comments={createComments()}
+      send={() => {}}
       target={targetFor("t1", 0, "a.txt")}
       turns={fakeTurns({
         patch: async () => {
@@ -215,6 +218,7 @@ it("offers to try again after a failure that may pass", async () => {
   render(
     <ChangesetPanel
       comments={createComments()}
+      send={() => {}}
       target={targetFor("t1", 0, "a.txt")}
       turns={fakeTurns({ patch })}
     />,
@@ -231,6 +235,7 @@ it("does not offer to try again on a binary file or a snapshot git cleaned up", 
   const view = render(
     <ChangesetPanel
       comments={createComments()}
+      send={() => {}}
       target={targetFor("t1", 0, "b.bin")}
       turns={turns}
     />,
@@ -258,6 +263,7 @@ it("says so for a changeset another Buzz recorded", () => {
   render(
     <ChangesetPanel
       comments={createComments()}
+      send={() => {}}
       target={targetFor("t9", 0)}
       turns={fakeTurns({ find: () => undefined })}
     />,

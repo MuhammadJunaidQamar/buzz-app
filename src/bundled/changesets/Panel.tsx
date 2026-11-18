@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PanelProps } from "../../features/panels/service";
 import {
   CaretLeftIcon,
@@ -10,11 +10,11 @@ import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { LoadingRegion } from "../../shared/design-system/ui/LoadingRegion";
 import { Select } from "../../shared/design-system/ui/Select";
 import { parsePatch } from "../diffs/parse";
-import { type Comments, formatComments } from "./comments";
+import { type Comments, type LineComment, formatComment } from "./comments";
 import { CommentableDiff } from "./LineComments";
 import type { ChangedFile } from "./git";
 import { parseTarget } from "./target";
-import type { Turns } from "./turns";
+import type { Turn, Turns } from "./turns";
 import { Counts, plural, totals } from "./Counts";
 import styles from "./Changesets.module.css";
 import { useLoaded } from "./useLoaded";
@@ -24,14 +24,17 @@ export function ChangesetPanel({
   target,
   turns,
   comments,
-}: Pick<PanelProps, "target"> & { turns: Turns; comments: Comments }) {
+  send,
+}: Pick<PanelProps, "target"> & {
+  turns: Turns;
+  comments: Comments;
+  /** Posts `text` to the turn's agent in its conversation; throws with the
+   * reason it could not. */
+  send(turn: Turn, text: string): void;
+}) {
   const link = useMemo(() => parseTarget(target), [target]);
   const found = link && turns.find(link.turn, link.checkout);
   const draft = link ? `${link.turn}:${link.checkout}` : "";
-  const unsent = useSyncExternalStore(comments.subscribe, () =>
-    comments.list(draft),
-  );
-  const [undelivered, setUndelivered] = useState(false);
   const [chosen, setChosen] = useState(link?.file);
   useEffect(() => setChosen(link?.file), [link?.file]);
   const listed = useLoaded(
@@ -60,15 +63,8 @@ export function ChangesetPanel({
     return <p role="alert">This changeset was recorded in another Buzz.</p>;
   const pending = listed.error === undefined && !files;
   const step = (by: number) => files && setChosen(files[index + by]?.path);
-  const send = () => {
-    const sent = comments.deliver(
-      found.turn.channelId,
-      found.turn.thread,
-      formatComments(found.checkout.dir, unsent),
-    );
-    setUndelivered(!sent);
-    if (sent) comments.clear(draft);
-  };
+  const post = (comment: Omit<LineComment, "id">) =>
+    send(found.turn, formatComment(found.checkout.dir, comment));
   return (
     <div className={styles.panel}>
       <InlineHeader
@@ -83,30 +79,6 @@ export function ChangesetPanel({
           ) : undefined
         }
       />
-      {unsent.length > 0 && (
-        <div className={styles.unsent}>
-          <p className="text-body-sm">{plural(unsent.length, "comment")}</p>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setUndelivered(false);
-              comments.clear(draft);
-            }}
-          >
-            Discard
-          </Button>
-          <Button size="sm" variant="primary" onClick={send}>
-            Add to message
-          </Button>
-          {undelivered && (
-            <p role="alert" className={styles.note}>
-              Couldn't add the comments to this chat's message. Open the chat,
-              finish any edit in its composer and try again.
-            </p>
-          )}
-        </div>
-      )}
       <LoadingRegion
         pending={pending}
         label="Reading the changes…"
@@ -164,6 +136,7 @@ export function ChangesetPanel({
               parsed={parsed}
               comments={comments}
               draft={draft}
+              send={post}
             />
           </>
         )}
@@ -178,6 +151,7 @@ function FileDiff({
   parsed,
   comments,
   draft,
+  send,
 }: {
   file: ChangedFile;
   patch: {
@@ -188,6 +162,7 @@ function FileDiff({
   parsed: ReturnType<typeof parsePatch>;
   comments: Comments;
   draft: string;
+  send(comment: Omit<LineComment, "id">): void;
 }) {
   if (file.binary)
     return <p className="text-body-sm">Binary file: no text diff to show.</p>;
@@ -211,6 +186,7 @@ function FileDiff({
       path={file.path}
       comments={comments}
       draft={draft}
+      send={send}
     />
   );
 }

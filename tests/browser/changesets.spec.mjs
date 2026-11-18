@@ -77,6 +77,19 @@ for (const { name, width, theme, large } of [
     await expect(panel.getByText("const retries = 3;")).toBeVisible();
     await expect(panel.getByText("const delay = 250;")).toBeVisible();
 
+    // A comment on a line goes straight to the agent and stays on the diff.
+    await panel.getByRole("button", { name: "Comment on line 2" }).click();
+    await panel
+      .getByRole("textbox", { name: "Comment on line 2" })
+      .fill("Make this configurable");
+    await panel.getByRole("button", { name: "Send" }).click();
+    await expect(
+      panel.getByRole("region", { name: "Comment on line 2" }),
+    ).toContainText("Sent to the agent");
+    expect(await page.evaluate(() => window.sent)).toEqual([
+      expect.stringContaining("Make this configurable"),
+    ]);
+
     // Keyboard steps to the next file; a binary file has no text diff.
     const next = panel.getByRole("button", { name: "Next file" });
     await next.focus();

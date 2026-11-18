@@ -56,19 +56,6 @@
   flex: 1;
   min-width: 0;
 }
-.unsent {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-.unsent > :first-child {
-  margin: 0;
-  margin-inline-end: auto;
-}
-.unsent > [role="alert"] {
-  flex-basis: 100%;
-}
 .line {
   display: block;
   width: 100%;
@@ -98,12 +85,6 @@
   border-radius: var(--radius-control);
   background: var(--surface-panel);
   color: var(--text-standard);
-}
-.commentHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
 }
 .commentText {
   margin: 0;
