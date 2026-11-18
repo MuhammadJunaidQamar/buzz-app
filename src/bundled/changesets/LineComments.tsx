@@ -70,6 +70,8 @@ export function CommentableDiff({
   // The line number that opened the field, which takes focus back.
   const opener = useRef<HTMLButtonElement | null>(null);
   const [failure, setFailure] = useState<string>();
+  // The one line number in the Tab order; arrow keys move it.
+  const [stop, setStop] = useState<string>();
   if (!files || !changes?.length)
     return <DiffViewer content={content} files={files} filePath={path} />;
   const low = pick && Math.min(pick.from, pick.to);
@@ -137,6 +139,8 @@ export function CommentableDiff({
         add={add}
       />,
     );
+  const first = changes[0];
+  const tabStop = stop ?? (first && getChangeKey(first));
   const renderGutter = ({ change, side, renderDefault }: GutterOptions) => {
     // One target per row: removed lines by their old number, the rest by
     // their number now.
@@ -147,12 +151,43 @@ export function CommentableDiff({
         : computeNewLineNumber(change)
       : -1;
     if (line < 0) return renderDefault();
+    const key = getChangeKey(change);
     return (
       <button
         type="button"
         className={styles.line}
+        data-change={key}
+        tabIndex={key === tabStop ? 0 : -1}
+        onFocus={() => setStop(key)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && event.shiftKey) {
+            event.preventDefault();
+            choose(change, event.currentTarget, true);
+            return;
+          }
+          const lines = [
+            ...(event.currentTarget
+              .closest("table")
+              ?.querySelectorAll<HTMLButtonElement>("button[data-change]") ??
+              []),
+          ];
+          const at = lines.indexOf(event.currentTarget);
+          const to =
+            event.key === "ArrowDown"
+              ? lines[at + 1]
+              : event.key === "ArrowUp"
+                ? lines[at - 1]
+                : event.key === "Home"
+                  ? lines[0]
+                  : event.key === "End"
+                    ? lines.at(-1)
+                    : undefined;
+          if (!to) return;
+          event.preventDefault();
+          to.focus();
+        }}
         aria-label={`Comment on ${change.type === "delete" ? "removed " : ""}line ${line}`}
-        title="Comment. Shift-click another line to cover a range."
+        title="Comment. Shift-click another line, or use the arrow keys and Shift+Enter, to cover a range."
         onClick={(event) => choose(change, event.currentTarget, event.shiftKey)}
       >
         {renderDefault()}
@@ -196,7 +231,7 @@ function NewComment({
   const [empty, setEmpty] = useState(!typed.current.trim());
   return (
     <form
-      className={styles.comment}
+      className={styles.card}
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
         add();
@@ -240,10 +275,7 @@ function NewComment({
 
 function SentComment({ comment }: { comment: LineComment }) {
   return (
-    <section
-      className={styles.comment}
-      aria-label={`Comment on ${comment.lines}`}
-    >
+    <section className={styles.card} aria-label={`Comment on ${comment.lines}`}>
       <span className={styles.note}>{comment.lines} · Sent to the agent</span>
       <p className={styles.commentText}>{comment.text}</p>
     </section>

@@ -152,3 +152,38 @@ it("fences quoted code past its own backticks and shortens long quotes", () => {
     ].join("\n"),
   );
 });
+
+it("puts one line number in the Tab order and moves it with the arrow keys", async () => {
+  panel();
+  const first = await screen.findByRole("button", {
+    name: "Comment on line 1",
+  });
+  const removed = screen.getByRole("button", {
+    name: "Comment on removed line 2",
+  });
+  expect(first).toHaveAttribute("tabindex", "0");
+  expect(removed).toHaveAttribute("tabindex", "-1");
+  first.focus();
+  fireEvent.keyDown(first, { key: "ArrowDown" });
+  expect(removed).toHaveFocus();
+  expect(removed).toHaveAttribute("tabindex", "0");
+  expect(first).toHaveAttribute("tabindex", "-1");
+  fireEvent.keyDown(removed, { key: "End" });
+  expect(
+    screen.getByRole("button", { name: "Comment on line 3" }),
+  ).toHaveFocus();
+});
+
+it("extends a comment's range with Shift+Enter", async () => {
+  panel();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Comment on line 1" }),
+  );
+  fireEvent.keyDown(screen.getByRole("button", { name: "Comment on line 2" }), {
+    key: "Enter",
+    shiftKey: true,
+  });
+  expect(
+    screen.getByRole("textbox", { name: "Comment on lines 1-2" }),
+  ).toBeInTheDocument();
+});

@@ -77,15 +77,6 @@
   padding: var(--space-2) var(--space-3);
   font-family: var(--font-sans);
 }
-.comment {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--border-standard);
-  border-radius: var(--radius-control);
-  background: var(--surface-panel);
-  color: var(--text-standard);
-}
 .commentText {
   margin: 0;
   font-size: var(--text-body-sm);

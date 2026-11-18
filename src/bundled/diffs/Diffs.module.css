@@ -93,6 +93,19 @@
 .viewer [class~="diff-gutter-insert"] {
   color: var(--text-success);
 }
+/* A selected added or removed line keeps its color; a bar in the gutter
+ * marks the selection. */
+.viewer [class~="diff-gutter-insert"][class~="diff-gutter-selected"],
+.viewer [class~="diff-code-insert"][class~="diff-code-selected"] {
+  background-color: var(--affordance-success);
+}
+.viewer [class~="diff-gutter-delete"][class~="diff-gutter-selected"],
+.viewer [class~="diff-code-delete"][class~="diff-code-selected"] {
+  background-color: var(--affordance-danger);
+}
+.viewer [class~="diff-gutter-selected"]:first-child {
+  box-shadow: inset 3px 0 0 var(--border-focus);
+}
 .removed,
 .viewer [class~="diff-code-delete"],
 .viewer [class~="diff-gutter-delete"] {
