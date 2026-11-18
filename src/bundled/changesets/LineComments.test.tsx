@@ -89,7 +89,7 @@ it("sends each comment on a range of lines to the turn's agent at once", async (
   );
   expect(
     screen.getByRole("region", { name: "Comment on lines 1-2" }),
-  ).toHaveTextContent("Sent to the agent");
+  ).toHaveTextContent("Rename this");
   expect(screen.queryByRole("textbox")).toBeNull();
   await comment("Comment on removed line 2", undefined, "Keep `old`");
   expect(send).toHaveBeenLastCalledWith(

@@ -57,6 +57,7 @@
   min-width: 0;
 }
 .line {
+  position: relative;
   display: block;
   width: 100%;
   padding: 0;
@@ -70,6 +71,21 @@
 .line:hover {
   color: var(--text-standard);
   text-decoration: underline;
+}
+/* Shown on the row under the pointer, or the focused line number, so line
+ * numbers read as something to click. */
+.lineIcon {
+  position: absolute;
+  inset-inline-start: var(--space-1);
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  opacity: 0;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+tr:hover .lineIcon,
+.line:focus-visible .lineIcon {
+  opacity: 1;
 }
 .thread {
   display: grid;

@@ -14,6 +14,7 @@ import {
   computeOldLineNumber,
   getChangeKey,
 } from "react-diff-view";
+import { ChatCircleIcon } from "../../shared/design-system/icons";
 import { Button } from "../../shared/design-system/ui/Button";
 import { Field } from "../../shared/design-system/ui/Field";
 import { Textarea } from "../../shared/design-system/ui/Textarea";
@@ -190,6 +191,11 @@ export function CommentableDiff({
         title="Comment. Shift-click another line, or use the arrow keys and Shift+Enter, to cover a range."
         onClick={(event) => choose(change, event.currentTarget, event.shiftKey)}
       >
+        <ChatCircleIcon
+          className={styles.lineIcon}
+          size="0.875rem"
+          aria-hidden="true"
+        />
         {renderDefault()}
       </button>
     );
@@ -276,7 +282,7 @@ function NewComment({
 function SentComment({ comment }: { comment: LineComment }) {
   return (
     <section className={styles.card} aria-label={`Comment on ${comment.lines}`}>
-      <span className={styles.note}>{comment.lines} · Sent to the agent</span>
+      <span className={styles.note}>{comment.lines}</span>
       <p className={styles.commentText}>{comment.text}</p>
     </section>
   );

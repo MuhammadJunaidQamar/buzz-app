@@ -85,7 +85,7 @@ for (const { name, width, theme, large } of [
     await panel.getByRole("button", { name: "Send" }).click();
     await expect(
       panel.getByRole("region", { name: "Comment on line 2" }),
-    ).toContainText("Sent to the agent");
+    ).toContainText("Make this configurable");
     expect(await page.evaluate(() => window.sent)).toEqual([
       expect.stringContaining("Make this configurable"),
     ]);
