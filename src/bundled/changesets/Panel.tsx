@@ -101,7 +101,8 @@ export function ChangesetPanel({
           </Button>
           {undelivered && (
             <p role="alert" className={styles.note}>
-              Open this chat to add the comments to your message.
+              Couldn't add the comments to this chat's message. Open the chat,
+              finish any edit in its composer and try again.
             </p>
           )}
         </div>
@@ -157,7 +158,7 @@ export function ChangesetPanel({
               </div>
             )}
             <FileDiff
-              key={file.path}
+              key={`${draft}:${file.path}`}
               file={file}
               patch={patch}
               parsed={parsed}

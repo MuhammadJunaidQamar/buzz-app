@@ -3,6 +3,7 @@ import {
   type ReactNode,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -63,25 +64,36 @@ export function CommentableDiff({
     [files],
   );
   const [pick, setPick] = useState<{ from: number; to: number }>();
-  const [text, setText] = useState("");
+  // What the open field holds, kept here so moving it to a wider range keeps
+  // it without each keystroke rendering the diff again.
+  const typed = useRef("");
+  // The line number that opened the field, which takes focus back.
+  const opener = useRef<HTMLButtonElement | null>(null);
   if (!files || !changes?.length)
     return <DiffViewer content={content} files={files} filePath={path} />;
   const low = pick && Math.min(pick.from, pick.to);
   const high = pick && Math.max(pick.from, pick.to);
   const picked =
     low === undefined || high === undefined ? [] : changes.slice(low, high + 1);
-  const choose = (change: ChangeData, extend: boolean) => {
+  const choose = (
+    change: ChangeData,
+    from: HTMLButtonElement,
+    extend: boolean,
+  ) => {
     const at = changes.indexOf(change);
     if (at < 0) return;
+    opener.current = from;
     setPick(
       extend && pick ? { from: pick.from, to: at } : { from: at, to: at },
     );
   };
   const cancel = () => {
     setPick(undefined);
-    setText("");
+    typed.current = "";
+    opener.current?.focus();
   };
   const add = () => {
+    const text = typed.current;
     if (!picked.length || !text.trim()) return;
     comments.add(draft, {
       path,
@@ -112,49 +124,13 @@ export function CommentableDiff({
   if (anchor)
     place(
       getChangeKey(anchor),
-      <form
+      <NewComment
         key="new"
-        className={styles.comment}
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault();
-          add();
-        }}
-      >
-        <Field label={`Comment on ${describeLines(picked)}`}>
-          <Textarea
-            autoFocus
-            rows={3}
-            value={text}
-            placeholder="What should the agent change?"
-            onChange={(event) => setText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                cancel();
-              } else if (
-                event.key === "Enter" &&
-                (event.metaKey || event.ctrlKey)
-              ) {
-                event.preventDefault();
-                add();
-              }
-            }}
-          />
-        </Field>
-        <div className={styles.actions}>
-          <Button size="sm" variant="ghost" onClick={cancel}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            variant="primary"
-            type="submit"
-            disabled={!text.trim()}
-          >
-            Comment
-          </Button>
-        </div>
-      </form>,
+        label={`Comment on ${describeLines(picked)}`}
+        typed={typed}
+        cancel={cancel}
+        add={add}
+      />,
     );
   const renderGutter = ({ change, side, renderDefault }: GutterOptions) => {
     // One target per row: removed lines by their old number, the rest by
@@ -172,7 +148,7 @@ export function CommentableDiff({
         className={styles.line}
         aria-label={`Comment on ${change.type === "delete" ? "removed " : ""}line ${line}`}
         title="Comment. Shift-click another line to cover a range."
-        onClick={(event) => choose(change, event.shiftKey)}
+        onClick={(event) => choose(change, event.currentTarget, event.shiftKey)}
       >
         {renderDefault()}
       </button>
@@ -196,6 +172,62 @@ export function CommentableDiff({
         renderGutter,
       }}
     />
+  );
+}
+
+function NewComment({
+  label,
+  typed,
+  cancel,
+  add,
+}: {
+  label: string;
+  typed: { current: string };
+  cancel(): void;
+  add(): void;
+}) {
+  const [empty, setEmpty] = useState(!typed.current.trim());
+  return (
+    <form
+      className={styles.comment}
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault();
+        add();
+      }}
+    >
+      <Field label={label}>
+        <Textarea
+          autoFocus
+          rows={3}
+          defaultValue={typed.current}
+          placeholder="What should the agent change?"
+          onChange={(event) => {
+            typed.current = event.target.value;
+            setEmpty(!typed.current.trim());
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              cancel();
+            } else if (
+              event.key === "Enter" &&
+              (event.metaKey || event.ctrlKey)
+            ) {
+              event.preventDefault();
+              add();
+            }
+          }}
+        />
+      </Field>
+      <div className={styles.actions}>
+        <Button size="sm" variant="ghost" onClick={cancel}>
+          Cancel
+        </Button>
+        <Button size="sm" variant="primary" type="submit" disabled={empty}>
+          Comment
+        </Button>
+      </div>
+    </form>
   );
 }
 

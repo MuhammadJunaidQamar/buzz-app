@@ -113,7 +113,9 @@ it("keeps the comments and says so when the chat's composer is not open", async 
   const comments = panel();
   await comment("Comment on line 2", undefined, "Why?");
   fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
-  expect(screen.getByRole("alert")).toHaveTextContent("Open this chat");
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Couldn't add the comments",
+  );
   expect(comments.list("t1:0")).toHaveLength(1);
 });
 
@@ -123,6 +125,9 @@ it("cancels a comment with Escape and removes a saved one", async () => {
     await screen.findByRole("button", { name: "Comment on line 3" }),
   );
   fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+  expect(
+    screen.getByRole("button", { name: "Comment on line 3" }),
+  ).toHaveFocus();
   expect(screen.queryByRole("textbox")).toBeNull();
   await comment("Comment on line 3", undefined, "Drop it");
   const saved = screen.getByRole("region", { name: "Comment on line 3" });
