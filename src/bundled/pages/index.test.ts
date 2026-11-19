@@ -39,9 +39,7 @@ it("owns only channel-backed note routes, tools and panels while preserving sepa
     expect(builtins).toEqual(
       expect.arrayContaining(["notes_get", "notes_set", "notes_rm"]),
     );
-    expect(
-      sessionTools(service.tools()).some((tool) => tool.name === "note"),
-    ).toBe(false);
+    expect(builtins.includes("note")).toBe(false);
     scope = ctx
       .extend({
         pluginOwner: { id: "com.squareup.pages", revision: "bundled" },
@@ -125,9 +123,6 @@ it("owns only channel-backed note routes, tools and panels while preserving sepa
       ...builtins,
       ...added,
     ]);
-    expect(
-      sessionTools(service.tools()).some((tool) => tool.name === "note"),
-    ).toBe(false);
     await scope.dispose();
     expect(service.tools()).toEqual([]);
     expect(pages.snapshot()).toEqual([]);

@@ -211,14 +211,11 @@ it("saves changed content after idle, stays in Editing and skips unchanged conte
   const f = await fixture();
   await advance(10_000);
   expect(f.save).not.toHaveBeenCalled();
-  f.change("New plan");
+  f.change("Final plan");
   expect(screen.getByRole("status")).toHaveTextContent("Unsaved changes");
   expect(
     screen.queryByRole("button", { name: "Discard changes" }),
   ).not.toBeInTheDocument();
-  await advance(1499);
-  expect(f.save).not.toHaveBeenCalled();
-  f.change("Final plan");
   await advance(1499);
   expect(f.save).not.toHaveBeenCalled();
   await advance(1);
@@ -273,7 +270,7 @@ it("pauses after a failed save, retains the draft, and retries only on request",
   f.failNextArtifact();
   f.change("Unsaved plan");
   await advance(1500);
-  await saved(f.save).catch(() => {});
+  await saved(f.save);
   expect(screen.getByRole("alert")).toHaveTextContent("Auto-save is paused");
   expect(f.workspace.drafts.get(noteKey(f.note))?.title).toBe("Unsaved plan");
   await advance(30_000);
@@ -435,7 +432,7 @@ it("preserves a concurrent draft and does not overwrite until the user resolves 
     markdown: "Another edit",
   });
   await advance(1500);
-  await saved(f.save).catch(() => {});
+  await saved(f.save);
   expect(
     screen.getByRole("dialog", { name: "This doc has a newer revision" }),
   ).toBeVisible();

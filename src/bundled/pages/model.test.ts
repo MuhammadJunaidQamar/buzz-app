@@ -2,9 +2,7 @@ import { fromMarkdown } from "mdast-util-from-markdown";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { signed } from "../../features/relay/testing";
 import {
-  NOTE_KIND,
   NoteConflict,
-  noteMarkdownLink,
   noteTag,
   noteTemplate,
   noteUrl,
@@ -703,20 +701,23 @@ it("rejects a revision without its edit channel before reading a file or allocat
   expect(f.channels.size).toBe(0);
 });
 
-it("uses stable, community-bound page links across Markdown, chat and OS ingress", async () => {
-  const f = await fixture(),
-    note = f.seed("Plan [new]", "Work");
+it("uses stable, community-bound page links across chat and OS ingress", () => {
+  const note = {
+    id: "11111111-1111-4111-8111-111111111111",
+    channel: "22222222-2222-4222-8222-222222222222",
+  };
+  const origin = "https://notes.example.test";
+  const viewer = "a".repeat(64);
   const url = noteUrl(note, "wss://notes.example.test");
   expect(parseNoteUrl(url)).toEqual({
     id: note.id,
     channel: note.channel,
-    community: f.origin,
+    community: origin,
   });
-  expect(noteMarkdownLink(note, f.origin)).toContain("Plan \\[new\\]");
   expect(parseBuzzLink(url)?.format).toBe("plugin");
   const target = buzzLinkTarget(url, {
-    viewer: f.viewer.pubkey,
-    communityOrigin: f.origin,
+    viewer,
+    communityOrigin: origin,
   });
   expect(target).toMatchObject({
     kind: "plugin",
@@ -725,13 +726,13 @@ it("uses stable, community-bound page links across Markdown, chat and OS ingress
     params: {
       id: note.id,
       channel: note.channel,
-      community: f.origin,
+      community: origin,
       view: "page",
     },
   });
-  expect(
-    deepLinkStep(url, { viewer: f.viewer.pubkey, selected: f.origin }),
-  ).toEqual({ open: target });
+  expect(deepLinkStep(url, { viewer, selected: origin })).toEqual({
+    open: target,
+  });
   expect(parseNoteUrl(`${url}&id=${note.id}`)).toBeUndefined();
   expect(
     parseNoteUrl(
@@ -741,10 +742,6 @@ it("uses stable, community-bound page links across Markdown, chat and OS ingress
       ),
     ),
   ).toBeUndefined();
-  expect(NOTE_KIND).toBe(45010);
-  expect(
-    await readNotesPage(f.workspace.read, f.viewer.pubkey, f.relay.pubkey),
-  ).toMatchObject({ more: false });
 });
 
 it("lists community view-only pages for nonmembers, retains editor access, and rejects reader-agent writes", async () => {

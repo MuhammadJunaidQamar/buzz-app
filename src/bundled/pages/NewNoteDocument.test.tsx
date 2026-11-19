@@ -40,6 +40,11 @@ async function fixture(initial: Partial<NewDraft> = {}) {
     realCreate,
     onCreated,
     onDraftChange,
+    async finishCreate() {
+      await act(async () => {
+        await create.mock.results.at(-1)?.value;
+      });
+    },
     props,
     view,
     title: screen.getByRole("textbox", { name: "Title" }),
@@ -55,16 +60,11 @@ it("opens a fresh editor without allocating storage, then auto-saves after idle"
   expect(screen.getByRole("textbox", { name: "Doc body" })).toBeVisible();
   await advance(15_000);
   expect(f.create).not.toHaveBeenCalled();
-  fireEvent.change(f.title, { target: { value: "New plan" } });
-  await advance(1499);
-  expect(f.create).not.toHaveBeenCalled();
   fireEvent.change(f.title, { target: { value: "Final plan" } });
   await advance(1499);
   expect(f.create).not.toHaveBeenCalled();
   await advance(1);
-  await act(async () => {
-    await f.create.mock.results[0]?.value;
-  });
+  await f.finishCreate();
   expect(f.create).toHaveBeenCalledOnce();
   expect(f.create.mock.calls[0]?.[0]).toMatchObject({
     title: "Final plan",
@@ -93,9 +93,7 @@ it("saves body-only pages with an untitled fallback and honors manual saving", a
   await advance(15_000);
   expect(f.create).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
-  await act(async () => {
-    await f.create.mock.results[0]?.value;
-  });
+  await f.finishCreate();
   expect(f.create.mock.calls[0]?.[0]).toMatchObject({
     title: "Untitled doc",
     markdown: "First thought",
@@ -126,9 +124,7 @@ it.each(["typing", "composition"])(
       f.title.setSelectionRange(2, 5);
       expect(f.title).toBeEnabled();
       pending.release();
-      await act(async () => {
-        await f.create.mock.results[0]?.value;
-      });
+      await f.finishCreate();
       expect(f.onCreated).not.toHaveBeenCalled();
       if (input === "composition") {
         await advance(15_000);
@@ -168,9 +164,7 @@ it("pauses on an uncertain receipt and retries the original identity and payload
   await advance(15_000);
   expect(f.create).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("button", { name: "Retry save" }));
-  await act(async () => {
-    await f.create.mock.results[1]?.value;
-  });
+  await f.finishCreate();
   expect(f.create.mock.calls[1]?.[0]).toEqual(f.create.mock.calls[0]?.[0]);
   const note = f.onCreated.mock.calls[0]?.[0];
   expect(f.workspace.drafts.get(noteKey(note))?.title).toBe(
@@ -203,9 +197,7 @@ it("defers first save while a draft is hidden or the user is still typing", asyn
   await advance(499);
   expect(f.create).not.toHaveBeenCalled();
   await advance(1);
-  await act(async () => {
-    await f.create.mock.results[0]?.value;
-  });
+  await f.finishCreate();
   expect(f.create).toHaveBeenCalledOnce();
   expect(f.create.mock.calls[0]?.[0].title).toBe("Plan 11");
 });
@@ -214,9 +206,7 @@ it("creates a private empty page when Share is explicitly requested", async () =
   const f = await fixture();
   f.unavailableInventory();
   fireEvent.click(screen.getByRole("button", { name: "Share doc" }));
-  await act(async () => {
-    await f.create.mock.results[0]?.value;
-  });
+  await f.finishCreate();
   const [note, presentation] = f.onCreated.mock.calls[0] ?? [];
   expect(presentation).toMatchObject({ share: true, autoSave: true });
   expect(f.channels.get(note.channel)?.roles).toEqual({

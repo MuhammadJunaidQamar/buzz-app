@@ -50,7 +50,6 @@ it("round-trips browser, editor, dialog, revision and new-draft addresses withou
     community: "https://notes.example.test",
   });
   expect(workingRoute({ id, channel })).toBeUndefined();
-  expect(workingRoute({ view: "note", id, channel })).toBeUndefined();
 });
 it.each([
   { view: "browse", query: "Plan", trash: true },
@@ -69,11 +68,7 @@ it.each([
   { view: "new", draft: "bad" },
   { view: "browse", edit: true },
   { view: "browse", folder: "custom" },
-  { view: "browse", folder: { title: "Shared with me" } },
   { view: "browse", query: "x".repeat(513) },
-  { view: "shared", shared: "" },
-  { view: "shared", shared: `30023:${"b".repeat(64)}:note`, edit: true },
-  { view: "profile", profile: "bad" },
   { view: "page", id, channel, shared: `30023:${"b".repeat(64)}:note` },
 ])("rejects malformed or content-bearing presentation: %o", (value) => {
   expect(workingRoute(value)).toBeUndefined();

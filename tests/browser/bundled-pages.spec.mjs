@@ -28,13 +28,12 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
     const f = window.workingNotesFixture;
     return f.agentEdit(f.agentPage, "Fresh unopened collection body");
   });
-  await page
-    .getByRole("searchbox", { name: "Search docs" })
-    .fill("Fresh unopened collection body");
+  const search = page.getByRole("searchbox", { name: "Search docs" });
+  await search.fill("Fresh unopened collection body");
   await expect(
     page.getByRole("link", { name: "Agent outline", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Clear search docs" }).click();
+  await search.fill("");
   const shared = page.getByRole("link", {
     name: "Shared research",
     exact: true,
@@ -50,9 +49,7 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
   await page.goForward();
   await expect(sharedDoc).toBeVisible();
   await page.getByRole("button", { name: "Back to docs", exact: true }).click();
-  await expect(
-    page.getByRole("searchbox", { name: "Search docs" }),
-  ).toBeFocused();
+  await expect(search).toBeFocused();
   await page
     .getByRole("link", { name: "Connected pages plan", exact: true })
     .click();

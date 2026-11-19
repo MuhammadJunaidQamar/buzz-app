@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { render, workspaceFixture, gate } from "./ui-testing";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import { NoteHistoryMenu, NoteSharing } from "./NoteDialogs";
@@ -11,6 +12,17 @@ import {
   MenuTrigger,
   MenuPopup,
 } from "../../shared/design-system/ui/Menu";
+
+function renderHistoryMenu(props: ComponentProps<typeof NoteHistoryMenu>) {
+  render(
+    <MenuRoot>
+      <MenuTrigger>Actions</MenuTrigger>
+      <MenuPopup>
+        <NoteHistoryMenu {...props} />
+      </MenuPopup>
+    </MenuRoot>,
+  );
+}
 
 it("retries history, pages the open submenu, and selects with the retained offset", async () => {
   const fixture = await workspaceFixture();
@@ -25,19 +37,7 @@ it("retries history, pages the open submenu, and selects with the retained offse
       limited: !!offset,
     }));
   const onSelect = vi.fn();
-  render(
-    <MenuRoot>
-      <MenuTrigger>Actions</MenuTrigger>
-      <MenuPopup>
-        <NoteHistoryMenu
-          note={note}
-          workspace={workspace}
-          disabled={false}
-          onSelect={onSelect}
-        />
-      </MenuPopup>
-    </MenuRoot>,
-  );
+  renderHistoryMenu({ note, workspace, disabled: false, onSelect });
   expect(history).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole("button", { name: "Actions" }));
   await userEvent.click(
@@ -88,19 +88,12 @@ it("shows each revision signer in history, with a key fallback for a missing pro
   vi.spyOn(Date, "now").mockReturnValue(
     (current.event.created_at + 120) * 1000,
   );
-  render(
-    <MenuRoot>
-      <MenuTrigger>Actions</MenuTrigger>
-      <MenuPopup>
-        <NoteHistoryMenu
-          note={current}
-          workspace={f.workspace}
-          disabled={false}
-          onSelect={() => {}}
-        />
-      </MenuPopup>
-    </MenuRoot>,
-  );
+  renderHistoryMenu({
+    note: current,
+    workspace: f.workspace,
+    disabled: false,
+    onSelect: () => {},
+  });
   await userEvent.click(screen.getByRole("button", { name: "Actions" }));
   await userEvent.click(
     await screen.findByRole("menuitem", { name: "Revision history" }),
