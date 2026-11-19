@@ -166,6 +166,7 @@ export function ConversationTab({
           <ConversationThread
             intro={intro}
             active={active}
+            shown={active}
             messageId={tab.messageId}
             navigation={navigation}
             retainThread
@@ -187,6 +188,7 @@ export function ConversationTab({
           <ConversationThread
             intro={intro}
             active={active}
+            shown={active}
             messageId={target}
             retainThread
             tabbed
