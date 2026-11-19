@@ -55,6 +55,7 @@ import {
   useRef,
   useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useSyncExternalStore,
   type ReactNode,
@@ -1934,6 +1935,14 @@ function AgentsMessageRow(props: MessageRowProps & { failure?: boolean }) {
   useEffect(() => {
     if (open) return keepMounted?.(row.id);
   }, [open, keepMounted, row.id]);
+  // Changing container replaces the line. A reader whose focus was on it
+  // stays on its replacement, so Tab continues from this row.
+  const line = useRef<HTMLButtonElement | null>(null);
+  const lineFocused = useRef(false);
+  useLayoutEffect(() => {
+    void bubble;
+    if (lineFocused.current) line.current?.focus({ preventScroll: true });
+  }, [bubble]);
   const resolveName = useChannelIdentityNames(references, row.channelId);
   const directory = useReferenceDirectory(references, participantProfiles);
   const { recipients, body } = useMemo(
@@ -2076,7 +2085,16 @@ function AgentsMessageRow(props: MessageRowProps & { failure?: boolean }) {
               }}
             >
               <Collapsible.Trigger
-                ref={trigger}
+                ref={(node) => {
+                  trigger.current = node;
+                  line.current = node;
+                }}
+                onFocus={() => {
+                  lineFocused.current = true;
+                }}
+                onBlur={() => {
+                  lineFocused.current = false;
+                }}
                 data-buzz-ui=""
                 className={styles.audienceLine}
                 aria-label={`${author.name}${to.length ? ` to ${to.map((who) => who.name).join(", ")}` : ""}: ${preview}${row.edited ? " (edited)" : ""}`}

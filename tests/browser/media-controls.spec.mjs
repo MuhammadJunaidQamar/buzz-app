@@ -489,6 +489,115 @@ for (const [order, query] of [
     }
   });
 
+// Browser-only: where focus goes when its element is removed, and where the
+// next Tab starts from, are the engine's sequential focus navigation.
+test("media comments keep keyboard focus on a recorded step when its agent's work ends", async ({
+  page,
+}) => {
+  await page.goto(
+    "/tests/fixtures/media-review.html?photo&agent-working&agent-update",
+  );
+  const dialog = page.getByRole("dialog", {
+    name: "Image viewer",
+    exact: true,
+  });
+  const drawer = dialog.getByRole("complementary", { name: "Media comments" });
+  const step = drawer.locator("[data-review-comment]").last();
+  const disclosure = step.getByRole("button", {
+    name: /Rechecking the second cut/,
+  });
+  await expect(step.locator("[data-agent-response-preview]")).toBeVisible();
+  await disclosure.focus();
+  await expect(disclosure).toBeFocused();
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("fixture-agent-done")),
+  );
+  // The step is now a history line: the same row, a replacement disclosure.
+  await expect(drawer.locator("[data-agent-response-preview]")).toHaveCount(0);
+  await expect(step).toContainText("Rechecking the second cut");
+  await expect(disclosure).toBeFocused();
+  // Tab moves on from the row to the composer below it, not to the viewer's
+  // first control.
+  await page.keyboard.press("Tab");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const comments = document.querySelector(
+          '[aria-label="Media comments"]',
+        );
+        const row = [...comments.querySelectorAll("[data-review-comment]")].at(
+          -1,
+        );
+        const active = document.activeElement;
+        return {
+          inComments: comments.contains(active),
+          afterRow: !!(
+            row.compareDocumentPosition(active) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+          ),
+          inRow: row.contains(active),
+        };
+      }),
+    )
+    .toEqual({ inComments: true, afterRow: true, inRow: false });
+});
+
+// Browser-only: the measured gaps come from wrapper spacing the stylesheet
+// picks by selector.
+test("media comments keep a finished step's spacing when its details open", async ({
+  page,
+}) => {
+  await page.goto(
+    "/tests/fixtures/media-review.html?photo&agent-update=between",
+  );
+  const drawer = page
+    .getByRole("dialog", { name: "Image viewer", exact: true })
+    .getByRole("complementary", { name: "Media comments" });
+  const rows = drawer.locator("[data-review-comment]");
+  await expect(rows).toHaveCount(4);
+  const step = rows.nth(2);
+  const disclosure = step.getByRole("button", {
+    name: /Rechecking the second cut/,
+  });
+  const entry = step.locator("[data-message-id]").first();
+  const gaps = async () => {
+    const [above, line, box, below] = await Promise.all(
+      [rows.nth(1), disclosure, entry, rows.nth(3)].map((part) =>
+        part.evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          const style = getComputedStyle(node);
+          // The row's content box: its own spacing is what is measured.
+          return {
+            top: rect.top + Number.parseFloat(style.paddingTop),
+            bottom: rect.bottom - Number.parseFloat(style.paddingBottom),
+            edge: [rect.top, rect.bottom],
+          };
+        }),
+      ),
+    );
+    return {
+      above: Math.round((line.edge[0] - above.bottom) * 2) / 2,
+      below: Math.round((below.top - box.edge[1]) * 2) / 2,
+    };
+  };
+  for (const density of ["default", "compact"]) {
+    await page.evaluate((density) => {
+      document.documentElement.dataset.messageDensity = density;
+    }, density);
+    await expect(disclosure, density).toHaveAttribute("aria-expanded", "false");
+    const closed = await gaps();
+    await disclosure.click();
+    await expect(disclosure, density).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      entry.getByText("Rechecking the second cut").last(),
+      density,
+    ).toBeVisible();
+    await expect.poll(gaps, { message: density }).toEqual(closed);
+    await disclosure.click();
+    await expect(disclosure, density).toHaveAttribute("aria-expanded", "false");
+  }
+});
+
 // Inline previews have a much shorter media area than the expanded player.
 test("narrow video thumbnails keep play clear of the progress controls", async ({
   page,

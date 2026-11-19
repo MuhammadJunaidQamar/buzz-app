@@ -90,6 +90,8 @@ const compactTimestamps = new URLSearchParams(location.search).has(
 // `agent-update=own` the step follows a comment the agent wrote itself. `steps`
 // seeds a finished step of the same run first, `own-steps` does so after the
 // agent's own comment, and `agents` makes that finished step another agent's.
+// `between` puts the step between two of the viewer's comments. A
+// `fixture-agent-done` event ends the agent's work.
 const agentWorking = new URLSearchParams(location.search).has("agent-working");
 const agentUpdate = new URLSearchParams(location.search).get("agent-update");
 const events = [
@@ -140,6 +142,13 @@ const events = [
         message(designer, "video-preview", "Rechecking the second cut", 6, [
           ["e", rootMessage.id, "", "reply"],
           ["audience", "agents"],
+        ]),
+      ]
+    : []),
+  ...(agentUpdate === "between"
+    ? [
+        message(viewer, "video-preview", "Thanks, that reads well.", 7, [
+          ["e", rootMessage.id, "", "reply"],
         ]),
       ]
     : []),
@@ -277,10 +286,21 @@ const working = {
     },
   ],
 };
+let agentWork = working;
 const session = agentWorking
   ? {
       ...owner.session,
-      agentActivity: { snapshot: () => working, subscribe: () => () => {} },
+      agentActivity: {
+        snapshot: () => agentWork,
+        subscribe(listener: () => void) {
+          const done = () => {
+            agentWork = { ...working, local: [] };
+            listener();
+          };
+          window.addEventListener("fixture-agent-done", done);
+          return () => window.removeEventListener("fixture-agent-done", done);
+        },
+      },
     }
   : owner.session;
 function Fixture() {

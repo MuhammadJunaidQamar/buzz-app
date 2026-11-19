@@ -693,6 +693,17 @@ function ReviewComments({
         .ensure(authors.split(":"), "background")
         .catch(() => {});
   }, [session.profiles, authors, profileGeneration]);
+  // A working step joins the group above only when that row is its agent's own
+  // comment. Earlier steps are history lines here, not part of one group, so a
+  // step under one is named and shown on its own.
+  const stacks = (at: number) => {
+    const step = activity.byRow.get(replies[at]?.id ?? "");
+    return (
+      !!step?.active &&
+      step.container === "bubble" &&
+      !activity.byRow.has(replies[at - 1]?.id ?? "")
+    );
+  };
   // Comment links stay inert: no host tab opener reaches them behind the review,
   // so mentions render as static names.
   return (
@@ -705,22 +716,14 @@ function ReviewComments({
       >
         {replies.map((row, index) => {
           const recorded = activity.byRow.get(row.id);
-          // A working step joins the group above only when that row is its
-          // agent's own comment. Earlier steps are history lines here, not part
-          // of one group, so a step under one is named and shown on its own.
-          const stacks = (at: number) => {
-            const step = activity.byRow.get(replies[at]?.id ?? "");
-            return (
-              !!step?.active &&
-              step.container === "bubble" &&
-              !activity.byRow.has(replies[at - 1]?.id ?? "")
-            );
-          };
           return (
             <div
               key={row.id}
               data-review-comment={row.id}
               data-selected={selectedComment === row.id || undefined}
+              // Row spacing follows this grouping, not the rows drawn inside.
+              data-stack-previous={stacks(index) || undefined}
+              data-stack-next={stacks(index + 1) || undefined}
               className={styles.mediaReviewComment}
             >
               <MessageRow
