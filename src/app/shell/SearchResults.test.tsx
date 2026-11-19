@@ -4948,8 +4948,8 @@ it("offers every scoped alias match when completion is ambiguous", async () => {
         openConversation={() => {}}
       />,
     );
-    // After two debounces only the author lookup is outstanding. If the chain
-    // ever gets shorter, this fails instead of the test silently over-waiting.
+    // Pins the current phases: after two SEARCH_DEBOUNCE_MS windows People is
+    // still pending, and the options arrive within the third.
     await settleSearchDebounces(2);
     const people = screen.getByRole("group", { name: "People" });
     expect(people).toHaveTextContent("Searching people…");
