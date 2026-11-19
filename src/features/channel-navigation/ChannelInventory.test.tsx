@@ -24,6 +24,7 @@ import { keypair, metadata, roster, signed } from "../relay/testing";
 import { huddleDescription } from "../huddle/lifecycle";
 import { createRelaySession } from "../relay/session";
 import { createChannelLifecycle } from "../relay/channel-lifecycle";
+import { createIdentityArchives } from "../relay/identity-archives";
 import { ReadError } from "../relay/errors";
 import { createRecovery, RECOVERY_NOTICE_DELAY_MS } from "../relay/recovery";
 import { createSidebarPreferencesStore } from "../relay/sidebar-preferences-store";
@@ -121,7 +122,7 @@ beforeEach(() => {
     },
   );
 });
-const owners: ReturnType<typeof createRelaySession>[] = [];
+const owners: { dispose(): void }[] = [];
 afterEach(() => {
   cleanup();
   for (const owner of owners.splice(0)) owner.dispose();
@@ -290,6 +291,132 @@ function fixture(
     },
   };
 }
+
+function archivedDmFixture(initiallyArchived = false) {
+  const authority = keypair();
+  const retired = keypair().pubkey;
+  const active = keypair().pubkey;
+  const f = fixture(undefined, "ready", [
+    {
+      id: "retired",
+      name: "Retired",
+      channelType: "dm",
+      participants: [retired],
+    },
+    { id: "active", name: "Active", channelType: "dm", participants: [active] },
+    {
+      id: "group",
+      name: "Group",
+      channelType: "dm",
+      participants: [retired, active],
+    },
+    { id: "unknown", name: "Unknown", channelType: "dm" },
+    { id: "self", name: "Self", channelType: "dm", participants: [] },
+    {
+      id: "channel",
+      name: "Channel",
+      channelType: "stream",
+      participants: [retired],
+    },
+  ]);
+  let archived = initiallyArchived;
+  let time = 0;
+  const read = vi.fn(async () => [
+    signed(authority, {
+      kind: 13535,
+      created_at: ++time,
+      content: "",
+      tags: [["-"], ...(archived ? [["p", retired]] : [])],
+    }),
+  ]);
+  const owner = createIdentityArchives({ read }, authority.pubkey);
+  owners.push(owner);
+  f.session.archives = owner.queries;
+  return {
+    ...f,
+    read,
+    owner,
+    retired,
+    async archive(value: boolean) {
+      archived = value;
+      await act(() => owner.queries.refresh());
+    },
+    row: (id: string) =>
+      document.querySelector<HTMLElement>(`[data-channel-id="${id}"]`),
+  };
+}
+
+it.each([false, true])(
+  "hides only archived one-to-one DMs, including startup (%s)",
+  async (initial) => {
+    const f = archivedDmFixture(initial);
+    render(f.view("retired"));
+    await waitFor(() =>
+      expect(f.session.archives.snapshot().status).toBe("ready"),
+    );
+    if (!initial) {
+      expect(f.row("retired")).not.toBeNull();
+      await f.archive(true);
+    }
+    await waitFor(() => expect(f.row("retired")).toBeNull());
+    for (const id of ["active", "group", "unknown", "self", "channel"])
+      expect(f.row(id)).not.toBeNull();
+    expect(f.session.channels.list().channels).toHaveLength(6);
+    expect(f.navigator.open).not.toHaveBeenCalled();
+    expect(f.read).toHaveBeenCalledWith(
+      [{ kinds: [13535], authors: [expect.any(String)], limit: 1 }],
+      expect.objectContaining({ priority: "background", fresh: true }),
+    );
+    await f.archive(false);
+    await waitFor(() => expect(f.row("retired")).not.toBeNull());
+  },
+);
+
+it("keeps archive filtering independent from manual hiding", async () => {
+  const f = archivedDmFixture();
+  render(f.view("active"));
+  await waitFor(() => expect(f.row("retired")).not.toBeNull());
+  const row = f.row("retired");
+  assert(row);
+  fireEvent.keyDown(row, { key: "ContextMenu" });
+  fireEvent.click(
+    await screen.findByRole("menuitem", { name: "Close conversation" }),
+  );
+  await waitFor(() => expect(f.row("retired")).toBeNull());
+  await f.archive(true);
+  await f.archive(false);
+  expect(f.row("retired")).toBeNull();
+});
+
+it("retains known archive evidence through read errors and reloads idle evidence", async () => {
+  const f = archivedDmFixture(true);
+  render(f.view("active"));
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  await waitFor(() => expect(f.row("retired")).toBeNull());
+  f.read.mockRejectedValueOnce(new Error("invalid archive snapshot"));
+  await act(() => f.session.archives.refresh());
+  expect(f.session.archives.snapshot().status).toBe("error");
+  expect(f.row("retired")).toBeNull();
+  act(() => f.owner.stale());
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  expect(f.read).toHaveBeenCalledTimes(3);
+  expect(f.row("retired")).toBeNull();
+});
+
+it("keeps DMs visible when the initial archive read fails", async () => {
+  const f = archivedDmFixture(true);
+  f.read.mockRejectedValue(new Error("invalid archive snapshot"));
+  render(f.view("active"));
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("error"),
+  );
+  expect(f.row("retired")).not.toBeNull();
+  expect(f.read).toHaveBeenCalledTimes(1);
+});
 
 function visibilityFixture() {
   const f = fixture();

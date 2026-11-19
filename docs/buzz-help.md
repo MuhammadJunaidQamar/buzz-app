@@ -767,6 +767,11 @@ and are asked to sign in again in Buzz.
   return. If this connection
   can't start DMs, New message still shows the earlier messages but Send is
   disabled, and search opens a one-to-one DM without bringing it back.
+- **Archived people and agents**: when the community identifies the other member
+  of a one-to-one DM as archived, Buzz hides it from the sidebar. Open conversations
+  stay open, and you can still find earlier conversations and messages in search
+  or open a message link. Group DMs stay visible. When refreshed community archive
+  information shows the member unarchived, the row returns unless you also hid it.
 - **Message link previews** appear when you hover or focus a Buzz message link.
   When the message can't be shown, the card says why: the channel is private,
   gone or in another community; the message isn't available, and may have

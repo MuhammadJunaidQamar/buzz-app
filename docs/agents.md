@@ -1315,13 +1315,17 @@ A successful snapshot replaces the entire list; newer timestamps / lower-id ties
 win. A session-local ordering fence survives cache clear, without retaining old
 archive contents; it is not persistent rollback protection across sessions/devices.
 Access purge, disconnect, cache clear and disposal clear evidence and cancel work.
-No startup request, periodic poll, event-union seeding or history filtering is added.
+The sidebar demands this read and re-ensures idle evidence after reconnect.
+No periodic poll, event-union seeding or history filtering is added.
 
 This is finite evidence, not a live archive directory.
 As in base Buzz, mention autocomplete, the
 mention picker and member-add omit archived identities: fail-open while the
 snapshot is unknown, never hiding the viewer from themself, and never touching
-history or channel membership. `not-archived` means absent from the read snapshot, not online,
+history or channel membership. The sidebar also omits a one-to-one DM when its
+single other participant is known archived, preserving group DMs, open views,
+search access and independent manual hiding. Unarchive restores its row when
+refreshed evidence arrives. `not-archived` means absent from the read snapshot, not online,
 owned, authorized or guaranteed current at a later write. Delta processing and
 packaged/live acceptance remain separate.
 
