@@ -1835,9 +1835,9 @@ tab, asks **Discard changes?** first; **Keep editing** keeps them.
 - **Settings → Decisions API** lists each community you joined, with a menu
   that chooses its decision provider and, below it, whether that provider can
   answer there. Builderlab is offered where the community has a Builderlab
-  sign-in server. You sign in to that server in Builderlab's own settings;
-  communities on the same server share that sign-in, so their availability
-  matches. TypeSafe's API key is one
+  sign-in server. You sign in to that server under **Settings → Identity →
+  Community sign-ins**; communities on the same server share that sign-in, so
+  their availability matches. TypeSafe's API key is one
   key that every community using TypeSafe shares. Until you choose, a
   community uses Builderlab where it is offered and TypeSafe elsewhere. When
   the provider a community uses cannot answer (for example Builderlab is not
