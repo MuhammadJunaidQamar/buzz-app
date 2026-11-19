@@ -413,13 +413,81 @@ test("media comments stack a working agent's recorded step under its own comment
             size: [avatar.width, avatar.height],
             column: avatar.x - column.x,
             pillEdge: stepPill.x - bubble.x,
+            // The thread's stacked-row gap, not the space between comments.
+            gap: stepPill.y - (bubble.y + bubble.height),
           };
         },
         { message: density },
       )
-      .toEqual({ size: [24, 24], column: 0, pillEdge: 0 });
+      .toEqual({
+        size: [24, 24],
+        column: 0,
+        pillEdge: 0,
+        gap: density === "compact" ? 8 : 2,
+      });
   }
 });
+
+// Earlier steps are history lines here, so a working step under one is not
+// part of a drawn group: it names its agent and shows its avatar itself.
+for (const [order, query] of [
+  ["an earlier step of its run", "steps"],
+  ["its own comment and an earlier step", "own-steps"],
+  // Sam has no picture and Alex has one, so the image is Alex's.
+  ["another agent's step", "agents"],
+])
+  test(`media comments attribute a working agent's recorded step after ${order}`, async ({
+    page,
+  }) => {
+    await page.goto(
+      `/tests/fixtures/media-review.html?photo&agent-working&agent-update=${query}`,
+    );
+    const drawer = page
+      .getByRole("dialog", { name: "Image viewer", exact: true })
+      .getByRole("complementary", { name: "Media comments" });
+    const rows = drawer.locator("[data-review-comment]");
+    const step = rows.last();
+    const pill = step.locator("[data-agent-response-preview]");
+    await expect(pill).toBeVisible();
+    await expect(drawer.locator("[data-agent-response-preview]")).toHaveCount(
+      1,
+    );
+    const history = rows.nth(-2);
+    await expect(history).toContainText("Opening the clip");
+    await expect(
+      drawer.locator("[data-stack-next], [data-stack-previous]"),
+    ).toHaveCount(0);
+    for (const density of ["default", "compact"]) {
+      await page.evaluate((density) => {
+        document.documentElement.dataset.messageDensity = density;
+      }, density);
+      await expect(step.locator('[class*="byline"]'), density).toHaveText(
+        /Alex/,
+      );
+      const avatar = step.locator(
+        '[class*="messageAvatar"] [data-avatar-shape]',
+      );
+      await expect(avatar.locator("img"), density).toHaveCount(1);
+      if (query === "own-steps")
+        await expect(
+          rows.nth(-3).locator('[class*="messageAvatar"] [data-avatar-shape]'),
+          density,
+        ).toHaveCount(1);
+      await expect
+        .poll(
+          async () => {
+            const [column, box] = await Promise.all(
+              [rows.first().locator("[data-avatar-shape]").first(), avatar].map(
+                (part) => part.boundingBox(),
+              ),
+            );
+            return { size: [box.width, box.height], column: box.x - column.x };
+          },
+          { message: density },
+        )
+        .toEqual({ size: [24, 24], column: 0 });
+    }
+  });
 
 // Inline previews have a much shorter media area than the expanded player.
 test("narrow video thumbnails keep play clear of the progress controls", async ({

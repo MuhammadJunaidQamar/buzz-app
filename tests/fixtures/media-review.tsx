@@ -39,7 +39,8 @@ window.addEventListener("pagehide", () => {
 // Isolated, ephemeral signing and publication. Nothing goes to the live relay.
 const viewer = keypair(),
   relay = keypair(),
-  designer = keypair();
+  designer = keypair(),
+  helper = keypair();
 const attachment = {
   url: "https://fixture.test/sample.mp4",
   name: "Review clip.mp4",
@@ -86,7 +87,9 @@ const compactTimestamps = new URLSearchParams(location.search).has(
 );
 // A working agent in the review thread: its conversation indicator, or with
 // `agent-update` its recorded step after the viewer's own comment. With
-// `agent-update=own` the step follows a comment the agent wrote itself.
+// `agent-update=own` the step follows a comment the agent wrote itself. `steps`
+// seeds a finished step of the same run first, `own-steps` does so after the
+// agent's own comment, and `agents` makes that finished step another agent's.
 const agentWorking = new URLSearchParams(location.search).has("agent-working");
 const agentUpdate = new URLSearchParams(location.search).get("agent-update");
 const events = [
@@ -109,16 +112,32 @@ const events = [
     3,
     [["e", rootMessage.id, "", "reply"]],
   ),
-  ...(agentUpdate === "own"
+  ...(agentUpdate?.startsWith("own")
     ? [
         message(designer, "video-preview", "I'll recheck the second cut.", 4, [
           ["e", rootMessage.id, "", "reply"],
         ]),
       ]
     : []),
+  ...(agentUpdate === "steps" ||
+  agentUpdate === "own-steps" ||
+  agentUpdate === "agents"
+    ? [
+        message(
+          agentUpdate === "agents" ? helper : designer,
+          "video-preview",
+          "Opening the clip",
+          5,
+          [
+            ["e", rootMessage.id, "", "reply"],
+            ["audience", "agents"],
+          ],
+        ),
+      ]
+    : []),
   ...(agentUpdate !== null
     ? [
-        message(designer, "video-preview", "Rechecking the second cut", 5, [
+        message(designer, "video-preview", "Rechecking the second cut", 6, [
           ["e", rootMessage.id, "", "reply"],
           ["audience", "agents"],
         ]),
@@ -129,6 +148,7 @@ const events = [
     picture: portraitUrl,
     ...(agentWorking ? { is_agent: true } : {}),
   }),
+  profile(helper, { name: "Sam", is_agent: true }),
   profile(viewer, { name: "You" }),
 ];
 // Keep selected and unselected reaction chips visible in the dark viewer fixture.
@@ -205,7 +225,11 @@ const owner = createRelaySession(
       return filters.flatMap((filter) => {
         if (filter.kinds?.includes(39002) || filter.kinds?.includes(39000))
           return [
-            roster(relay, "video-preview", [viewer.pubkey, designer.pubkey]),
+            roster(relay, "video-preview", [
+              viewer.pubkey,
+              designer.pubkey,
+              helper.pubkey,
+            ]),
             metadata(relay, "video-preview", "Video preview"),
           ];
         if (filter.ids)

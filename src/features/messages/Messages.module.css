@@ -2602,6 +2602,25 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
   padding-block: var(--space-2);
   margin-bottom: var(--space-2);
 }
+/* A working step stacked under its agent's comment reads as one group: the
+   row spacing between them gives way to the thread's stacked-row gap. */
+.mediaReviewViewer .mediaReviewComment:has(.message[data-stack-next]) {
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+.mediaReviewViewer .mediaReviewComment:has(.message[data-stack-previous]) {
+  padding-top: var(--space-half);
+}
+:where(html[data-message-density="compact"])
+  .mediaReviewViewer
+  .mediaReviewComment:has(.message[data-stack-next]) {
+  padding-bottom: var(--space-1);
+}
+:where(html[data-message-density="compact"])
+  .mediaReviewViewer
+  .mediaReviewComment:has(.message[data-stack-previous]) {
+  padding-top: var(--space-1);
+}
 .mediaReviewComment[data-selected] {
   outline: 1px solid var(--border-prominent);
   outline-offset: -1px;

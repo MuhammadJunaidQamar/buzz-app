@@ -705,7 +705,17 @@ function ReviewComments({
       >
         {replies.map((row, index) => {
           const recorded = activity.byRow.get(row.id);
-          const next = activity.byRow.get(replies[index + 1]?.id ?? "");
+          // A working step joins the group above only when that row is its
+          // agent's own comment. Earlier steps are history lines here, not part
+          // of one group, so a step under one is named and shown on its own.
+          const stacks = (at: number) => {
+            const step = activity.byRow.get(replies[at]?.id ?? "");
+            return (
+              !!step?.active &&
+              step.container === "bubble" &&
+              !activity.byRow.has(replies[at - 1]?.id ?? "")
+            );
+          };
           return (
             <div
               key={row.id}
@@ -720,10 +730,13 @@ function ReviewComments({
                   recorded,
                   // A working step is this thread's indicator, laid out like
                   // one. Finished steps stay quiet history lines.
-                  recorded?.active ? recorded.container : "history",
+                  !recorded?.active
+                    ? "history"
+                    : stacks(index)
+                      ? "bubble"
+                      : "standalone",
                 )}
-                // A working step under its agent's own comment joins that group.
-                stackNext={!!next?.active && next.container === "bubble"}
+                stackNext={stacks(index + 1)}
                 extensions={extensions}
                 session={session}
                 scope={scope}
