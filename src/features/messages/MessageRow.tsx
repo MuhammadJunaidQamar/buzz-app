@@ -1891,6 +1891,9 @@ export const MessageRow = memo(function AudienceMessageRow(
   );
 });
 
+// What can hold focus in an activity entry. Its line is the first.
+const focusStops =
+  "a[href], button, input, select, textarea, summary, audio[controls], video[controls], [tabindex]";
 function AgentsMessageRow(props: MessageRowProps & { failure?: boolean }) {
   const {
     row,
@@ -1935,13 +1938,24 @@ function AgentsMessageRow(props: MessageRowProps & { failure?: boolean }) {
   useEffect(() => {
     if (open) return keepMounted?.(row.id);
   }, [open, keepMounted, row.id]);
-  // Changing container replaces the line. A reader whose focus was on it
-  // stays on its replacement, so Tab continues from this row.
-  const line = useRef<HTMLButtonElement | null>(null);
-  const lineFocused = useRef(false);
+  // Changing container replaces the entry. A reader whose focus was in it
+  // stays on the same stop in its replacement, or else on its line, so Tab
+  // continues from this row. Focus that had left the entry is not moved.
+  const entry = useRef<HTMLDivElement | null>(null);
+  const focused = useRef<{ entry: Element; stop: Element } | null>(null);
   useLayoutEffect(() => {
     void bubble;
-    if (lineFocused.current) line.current?.focus({ preventScroll: true });
+    const was = focused.current;
+    const now = entry.current;
+    if (!was || !now || was.stop.isConnected) return;
+    const stops = (root: Element) => [
+      ...root.querySelectorAll<HTMLElement>(focusStops),
+    ];
+    const [line, ...rest] = stops(now);
+    const same = rest[stops(was.entry).indexOf(was.stop as HTMLElement) - 1];
+    (same?.tagName === was.stop.tagName ? same : line)?.focus({
+      preventScroll: true,
+    });
   }, [bubble]);
   const resolveName = useChannelIdentityNames(references, row.channelId);
   const directory = useReferenceDirectory(references, participantProfiles);
@@ -2065,6 +2079,16 @@ function AgentsMessageRow(props: MessageRowProps & { failure?: boolean }) {
               data-highlight-surface=""
               data-thread-open={props.threadOpen || undefined}
               aria-current={props.threadOpen ? true : undefined}
+              ref={entry}
+              onFocus={(event) => {
+                focused.current = {
+                  entry: event.currentTarget,
+                  stop: event.target,
+                };
+              }}
+              onBlur={() => {
+                focused.current = null;
+              }}
               // One stable anchor survives both animation directions. Not the
               // button: revealing an anchor takes it out of the Tab order.
               data-message-id={row.id}
@@ -2085,16 +2109,7 @@ function AgentsMessageRow(props: MessageRowProps & { failure?: boolean }) {
               }}
             >
               <Collapsible.Trigger
-                ref={(node) => {
-                  trigger.current = node;
-                  line.current = node;
-                }}
-                onFocus={() => {
-                  lineFocused.current = true;
-                }}
-                onBlur={() => {
-                  lineFocused.current = false;
-                }}
+                ref={trigger}
                 data-buzz-ui=""
                 className={styles.audienceLine}
                 aria-label={`${author.name}${to.length ? ` to ${to.map((who) => who.name).join(", ")}` : ""}: ${preview}${row.edited ? " (edited)" : ""}`}

@@ -90,8 +90,9 @@ const compactTimestamps = new URLSearchParams(location.search).has(
 // `agent-update=own` the step follows a comment the agent wrote itself. `steps`
 // seeds a finished step of the same run first, `own-steps` does so after the
 // agent's own comment, and `agents` makes that finished step another agent's.
-// `between` puts the step between two of the viewer's comments. A
-// `fixture-agent-done` event ends the agent's work.
+// `between` puts the step between two of the viewer's comments, and `link`
+// gives the step a link in its details. A `fixture-agent-done` event ends the
+// agent's work; `fixture-agent-step` delivers the run's next step.
 const agentWorking = new URLSearchParams(location.search).has("agent-working");
 const agentUpdate = new URLSearchParams(location.search).get("agent-update");
 const events = [
@@ -139,10 +140,18 @@ const events = [
     : []),
   ...(agentUpdate !== null
     ? [
-        message(designer, "video-preview", "Rechecking the second cut", 6, [
-          ["e", rootMessage.id, "", "reply"],
-          ["audience", "agents"],
-        ]),
+        message(
+          designer,
+          "video-preview",
+          agentUpdate === "link"
+            ? "Rechecking the second cut against https://example.org/cut"
+            : "Rechecking the second cut",
+          6,
+          [
+            ["e", rootMessage.id, "", "reply"],
+            ["audience", "agents"],
+          ],
+        ),
       ]
     : []),
   ...(agentUpdate === "between"
@@ -216,12 +225,22 @@ const owner = createRelaySession(
             ],
           }),
         ]);
+      const step = () => {
+        const next = message(designer, "video-preview", "Writing it up", 8, [
+          ["e", rootMessage.id, "", "reply"],
+          ["audience", "agents"],
+        ]);
+        events.push(next);
+        callbacks.receive([next]);
+      };
       window.addEventListener("fixture-typing", typing);
+      window.addEventListener("fixture-agent-step", step);
       return {
         update() {},
         retry() {},
         dispose() {
           window.removeEventListener("fixture-typing", typing);
+          window.removeEventListener("fixture-agent-step", step);
         },
       };
     },

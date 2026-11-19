@@ -542,6 +542,67 @@ test("media comments keep keyboard focus on a recorded step when its agent's wor
     .toEqual({ inComments: true, afterRow: true, inRow: false });
 });
 
+// Browser-only, as above: the focused link is removed with the row's old
+// container, by either route that makes a working step a history line.
+for (const [route, event] of [
+  ["its agent's work ends", "fixture-agent-done"],
+  ["a newer step arrives", "fixture-agent-step"],
+]) {
+  const open = async (page) => {
+    await page.goto(
+      "/tests/fixtures/media-review.html?photo&agent-working&agent-update=link",
+    );
+    const drawer = page
+      .getByRole("dialog", { name: "Image viewer", exact: true })
+      .getByRole("complementary", { name: "Media comments" });
+    const step = drawer
+      .locator("[data-review-comment]")
+      .filter({ hasText: "Rechecking the second cut" });
+    const link = step.getByRole("link", { name: "https://example.org/cut" });
+    await expect(step.locator("[data-agent-response-preview]")).toBeVisible();
+    await step.getByRole("button", { name: /Rechecking/ }).click();
+    await expect(link).toBeVisible();
+    return {
+      drawer,
+      link,
+      // The step is then a history line: the same row, replacement details.
+      async change() {
+        await page.evaluate(
+          (event) => window.dispatchEvent(new Event(event)),
+          event,
+        );
+        await expect(step.locator("[data-agent-response-preview]")).toHaveCount(
+          0,
+        );
+        await expect(link).toBeVisible();
+      },
+    };
+  };
+
+  test(`media comments keep keyboard focus on a link in a step's open details when ${route}`, async ({
+    page,
+  }) => {
+    const { link, change } = await open(page);
+    await link.focus();
+    await expect(link).toBeFocused();
+    await change();
+    await expect(link).toBeFocused();
+  });
+
+  test(`media comments leave focus outside a step's open details when ${route}`, async ({
+    page,
+  }) => {
+    const { drawer, link, change } = await open(page);
+    const composer = drawer.getByRole("textbox", { name: "Reply to thread" });
+    // Focus that has left the row is not pulled back into it.
+    await link.focus();
+    await composer.focus();
+    await expect(composer).toBeFocused();
+    await change();
+    await expect(composer).toBeFocused();
+  });
+}
+
 // Browser-only: the measured gaps come from wrapper spacing the stylesheet
 // picks by selector.
 test("media comments keep a finished step's spacing when its details open", async ({
