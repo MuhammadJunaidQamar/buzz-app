@@ -295,6 +295,79 @@ test("unavailable media keeps its explanation readable and recovery visible", as
   await expect(dialog.getByRole("heading", { name: "Comments" })).toBeVisible();
 });
 
+// Browser-only: avatar and pill geometry, where the engines size an absolutely
+// positioned avatar slot differently.
+for (const [working, query, row] of [
+  ["conversation indicator", "agent-working", ""],
+  // The step follows the viewer's own comment, inside its own comment row.
+  ["recorded step", "agent-working&agent-update", "[data-review-comment] "],
+])
+  test(`media comments keep a working agent's ${working} avatar in the comment avatar column`, async ({
+    page,
+  }) => {
+    await page.goto(`/tests/fixtures/media-review.html?photo&${query}`);
+    const drawer = page
+      .getByRole("dialog", { name: "Image viewer", exact: true })
+      .getByRole("complementary", { name: "Media comments" });
+    // The agent's comment is first; the viewer's own comment is the last.
+    const comment = drawer.locator("[data-review-comment]").first();
+    const indicator = drawer
+      .locator(`${row}[data-agent-response-preview]`)
+      .first();
+    await expect(indicator).toBeVisible();
+    for (const density of ["default", "compact"]) {
+      await page.evaluate((density) => {
+        document.documentElement.dataset.messageDensity = density;
+      }, density);
+      await expect
+        .poll(
+          async () => {
+            const [avatar, bubble, agentAvatar, pill] = await Promise.all(
+              [
+                comment.locator("[data-avatar-shape]").first(),
+                comment.locator('[class*="messageBubble"]').first(),
+                indicator.locator("[data-avatar-shape]"),
+                indicator.locator('[class*="messageBubble"]').first(),
+              ].map((part) => part.boundingBox()),
+            );
+            return {
+              size: [agentAvatar.width, agentAvatar.height],
+              column: agentAvatar.x - avatar.x,
+              pillEdge: pill.x - bubble.x,
+              gap: pill.x - (agentAvatar.x + agentAvatar.width),
+              commentGap: bubble.x - (avatar.x + avatar.width),
+              // Beside its pill, not on top of it.
+              clear:
+                agentAvatar.x + agentAvatar.width <= pill.x ||
+                agentAvatar.y + agentAvatar.height <= pill.y ||
+                agentAvatar.y >= pill.y + pill.height,
+              // Bubbles end on the avatar's bottom edge; a flat list centres
+              // the avatar on the first line's top edge.
+              block:
+                density === "compact"
+                  ? agentAvatar.y + agentAvatar.height / 2 - pill.y
+                  : agentAvatar.y + agentAvatar.height - pill.y - pill.height,
+              commentBlock:
+                density === "compact"
+                  ? avatar.y + avatar.height / 2 - bubble.y
+                  : avatar.y + avatar.height - bubble.y - bubble.height,
+            };
+          },
+          { message: density },
+        )
+        .toEqual({
+          size: [24, 24],
+          column: 0,
+          pillEdge: 0,
+          gap: density === "compact" ? 10 : 4,
+          commentGap: density === "compact" ? 10 : 4,
+          clear: true,
+          block: 0,
+          commentBlock: 0,
+        });
+    }
+  });
+
 // Inline previews have a much shorter media area than the expanded player.
 test("narrow video thumbnails keep play clear of the progress controls", async ({
   page,

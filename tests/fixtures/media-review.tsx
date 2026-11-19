@@ -83,6 +83,9 @@ const emptyThread = new URLSearchParams(location.search).has("empty");
 const compactTimestamps = new URLSearchParams(location.search).has(
   "timestamps",
 );
+// A working agent in the review thread: its conversation indicator, or with
+// `agent-update` its recorded step after the viewer's own comment.
+const agentWorking = new URLSearchParams(location.search).has("agent-working");
 const events = [
   rootMessage,
   message(
@@ -103,7 +106,19 @@ const events = [
     3,
     [["e", rootMessage.id, "", "reply"]],
   ),
-  profile(designer, { name: "Alex", picture: portraitUrl }),
+  ...(new URLSearchParams(location.search).has("agent-update")
+    ? [
+        message(designer, "video-preview", "Rechecking the second cut", 5, [
+          ["e", rootMessage.id, "", "reply"],
+          ["audience", "agents"],
+        ]),
+      ]
+    : []),
+  profile(designer, {
+    name: "Alex",
+    picture: portraitUrl,
+    ...(agentWorking ? { is_agent: true } : {}),
+  }),
   profile(viewer, { name: "You" }),
 ];
 // Keep selected and unselected reaction chips visible in the dark viewer fixture.
@@ -208,6 +223,32 @@ const owner = createRelaySession(
 await owner.session.read([
   { kinds: [39002, 39000], "#d": ["video-preview"], limit: 10 },
 ]);
+const working = {
+  status: "listening" as const,
+  records: [],
+  turns: [],
+  typing: [],
+  trimmed: 0,
+  local: [
+    {
+      scope: "video-preview",
+      agent: designer.pubkey,
+      channelId: "video-preview",
+      messageId: rootMessage.id,
+      threadRootId: rootMessage.id,
+      thread: true,
+      state: "working" as const,
+      startedAt: Date.now(),
+      step: { tool: "Rechecking rather than replying from memory" },
+    },
+  ],
+};
+const session = agentWorking
+  ? {
+      ...owner.session,
+      agentActivity: { snapshot: () => working, subscribe: () => () => {} },
+    }
+  : owner.session;
 function Fixture() {
   useKeyboardFocusVisibility();
   const [review, setReview] = useState<
@@ -257,7 +298,7 @@ function Fixture() {
       {new URLSearchParams(location.search).has("thread") ? (
         <div style={{ height: 650 }}>
           <ThreadPanel
-            session={owner.session}
+            session={session}
             extensions={extensions}
             scope="video-preview"
             channelId="video-preview"
@@ -306,7 +347,7 @@ function Fixture() {
       {review !== undefined && (
         <MediaReviewViewer
           attachment={review.attachment}
-          session={owner.session}
+          session={session}
           extensions={extensions}
           scope="video-preview"
           channelId="video-preview"

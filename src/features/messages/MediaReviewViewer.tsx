@@ -704,6 +704,7 @@ function ReviewComments({
         aria-label="Media comments"
       >
         {replies.map((row, index) => {
+          const recorded = activity.byRow.get(row.id);
           return (
             <div
               key={row.id}
@@ -715,8 +716,10 @@ function ReviewComments({
                 row={row}
                 recordedActivity={stableActivity.activity(
                   row.id,
-                  activity.byRow.get(row.id),
-                  "history",
+                  recorded,
+                  // A working step is this thread's indicator, laid out like
+                  // one. Finished steps stay quiet history lines.
+                  recorded?.active ? "standalone" : "history",
                 )}
                 extensions={extensions}
                 session={session}
