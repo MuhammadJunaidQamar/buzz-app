@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { FrequentlyUsed, SearchIndex } from "emoji-mart";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { mountEmojiMart } from "./emoji-mart";
 import { PREVIEW_ACTION_SLOT } from "./add-emoji";
@@ -25,6 +25,11 @@ it("cancels Mart's pending theme update when the picker closes", async () => {
   // Frequent names the custom emoji that dispose() deletes from Mart's Data.
   const id = "buzz-custom/fixture/stamp";
   FrequentlyUsed.add({ id });
+  // Keep later tests' Frequent row independent of this one.
+  onTestFinished(() => {
+    localStorage.removeItem("emoji-mart.frequently");
+    localStorage.removeItem("emoji-mart.last");
+  });
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = mountEmojiMart({
     host,
@@ -49,6 +54,16 @@ it("cancels Mart's pending theme update when the picker closes", async () => {
       throw new Error("Frequent has not rendered the custom emoji");
   });
   vi.useFakeTimers();
+  // A keyboard-navigation mark re-syncs appearance with an unchanged theme;
+  // re-setting it would arm Mart's deferred render on every key.
+  document.documentElement.dataset.keyboardNavigation = "";
+  await Promise.resolve();
+  expect(picker).toHaveAttribute("data-keyboard-navigation");
+  expect(vi.getTimerCount()).toBe(0);
+  delete document.documentElement.dataset.keyboardNavigation;
+  await Promise.resolve();
+  expect(picker).not.toHaveAttribute("data-keyboard-navigation");
+  expect(vi.getTimerCount()).toBe(0);
   const theme = picker.getAttribute("theme") === "dark" ? "light" : "dark";
   picker.setAttribute("theme", theme);
   // The private field dispose() clears; a rename must fail here, not in CI.

@@ -235,23 +235,32 @@ test("section emoji edits are centered, keyboard-safe, independently removable a
   // no longer re-sets an unchanged theme, so flip the theme itself and close in
   // the same task. The hover keeps a pointer actionability check on Remove.
   await remove.hover();
-  const closedBeforeMartTimer = await remove.evaluate(async (button) => {
+  const teardownRace = await remove.evaluate(async (button) => {
     const mart = button.ownerDocument.querySelector("em-emoji-picker");
     // Armed first, this 0 ms timer runs just before the one Mart arms below.
     const beforeMart = new Promise((resolve) => setTimeout(resolve));
+    // Mart's private deferred-render handle; it must change, or no race is armed.
+    const timerBefore = mart?.component?.nextStateTimer;
     mart?.setAttribute(
       "theme",
       mart.getAttribute("theme") === "dark" ? "light" : "dark",
     );
+    const timerAfter = mart?.component?.nextStateTimer;
     button.click();
     // A real click's pointerdown clears the mark; keep the journey in that state.
     delete button.ownerDocument.documentElement.dataset.keyboardNavigation;
     await beforeMart;
-    return mart !== null && !mart.isConnected;
+    return {
+      martArmedRender: timerAfter !== undefined && timerAfter !== timerBefore,
+      closedBeforeMartTimer: mart !== null && !mart.isConnected,
+    };
   });
   // If teardown were deferred past Mart's timer, the timer would render while
   // the emoji still exist, and this step would stop reproducing the race.
-  expect(closedBeforeMartTimer).toBe(true);
+  expect(teardownRace).toEqual({
+    martArmedRender: true,
+    closedBeforeMartTimer: true,
+  });
   await expect(picker).toHaveCount(0);
   await expect(input).toHaveValue("Work");
   await expect(
