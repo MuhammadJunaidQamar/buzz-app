@@ -25,7 +25,10 @@ it("cancels Mart's pending theme update when the picker closes", async () => {
   // Frequent names the custom emoji that dispose() deletes from Mart's Data.
   const id = "buzz-custom/fixture/stamp";
   FrequentlyUsed.add({ id });
-  // Keep later tests' Frequent row independent of this one.
+  // Clears only the persisted Frequent state, so a later file or a reload
+  // starts clean. emoji-mart's module-level FrequentlyUsed index keeps its
+  // in-memory copy, so later tests in this file still see the fixture emoji
+  // in Frequent.
   onTestFinished(() => {
     localStorage.removeItem("emoji-mart.frequently");
     localStorage.removeItem("emoji-mart.last");
