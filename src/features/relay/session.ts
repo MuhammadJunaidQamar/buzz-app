@@ -2317,7 +2317,11 @@ export function createRelaySession(
               input.description,
               input.ttlSeconds,
               active,
-              { labels: input.labels, system: input.system },
+              {
+                labels: input.labels,
+                system: input.system,
+                migration: input.migration,
+              },
             ),
           delivered: (id, active) =>
             channelWrites.delivered(
@@ -2527,6 +2531,7 @@ export function createRelaySession(
           ? { labels: Object.freeze([...new Set(input.labels)]) }
           : {}),
         ...(input.system ? { system: true as const } : {}),
+        migration: input.migration,
       };
       const signature = JSON.stringify(normalized);
       if (unconfirmed?.signature !== signature) {
@@ -2544,7 +2549,11 @@ export function createRelaySession(
             normalized.description,
             normalized.ttlSeconds,
             undefined,
-            { labels: normalized.labels, system: normalized.system },
+            {
+              labels: normalized.labels,
+              system: normalized.system,
+              migration: normalized.migration,
+            },
           ),
         };
       }
@@ -2680,6 +2689,7 @@ export function createRelaySession(
   });
   const session = Object.freeze({
     artifactIncremental: transport?.artifactIncremental,
+    supportsMigrationWrites: true as const,
     memberAdditions,
     presence,
     viewer: transport?.viewer,
