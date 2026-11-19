@@ -1069,9 +1069,7 @@ export async function connectNativeTransport(
                 );
                 return {
                   binding: result,
-                  response: new Response(result.body, {
-                    status: result.status,
-                  }),
+                  response: nativeResponse({ ...result, headers: {} }),
                 };
               },
               signal,

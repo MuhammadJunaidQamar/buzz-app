@@ -2522,6 +2522,28 @@ it.each([401, 403])(
   },
 );
 
+it.each([
+  [204, "invalid-response"],
+  [205, "invalid-response"],
+  [304, "unavailable"],
+] as const)(
+  "native compact reads classify body-forbidden HTTP %i as %s",
+  async (status, kind) => {
+    const fixture = await compactNativeFixture();
+    try {
+      const failed = expect(fixture.read()).rejects.toMatchObject({
+        name: "ReadError",
+        kind,
+        ...(status === 304 && { status }),
+      });
+      await (await fixture.next()).reply({ status, body: "unexpected body" });
+      await failed;
+    } finally {
+      fixture.finish();
+    }
+  },
+);
+
 it("cancels native compact reads and discovers disabled capability afresh", async () => {
   const { MembershipUnsupported } = await import("./membership-snapshot");
   const fixture = await compactNativeFixture();
