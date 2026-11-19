@@ -72,6 +72,16 @@ for (const cachedStartup of [false, true]) {
         release = resolve;
       });
       const pendingRoutes = [];
+      // The app gives up on a preferences read after 10 s, and the failed read
+      // ends the delay just as release() would. A slow WebKit runner can reach
+      // the wheel below about 10 s after the reload, and the saved position
+      // then lands first: 900 + 1800. This test is about a held read, not that
+      // deadline, so the reload's 10 s deadlines outlast the test. Playwright's
+      // clock doesn't cover AbortSignal.timeout.
+      await page.addInitScript(() => {
+        const timeout = AbortSignal.timeout.bind(AbortSignal);
+        AbortSignal.timeout = (ms) => timeout(ms === 10_000 ? 120_000 : ms);
+      });
       await page.route("**/api/relay/primary/sidebar-preferences", (route) => {
         const pending = held.then(() => route.continue());
         pendingRoutes.push(pending);
