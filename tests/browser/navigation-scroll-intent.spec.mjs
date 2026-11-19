@@ -79,10 +79,12 @@ for (const cachedStartup of [false, true]) {
       // test is about a held read, not that deadline. Playwright's clock
       // doesn't cover AbortSignal.timeout, so until Primary's preferences
       // decode is issued, 10 s deadlines outlast the test; the first such
-      // request restores the originals, leaving later deadlines real. Each
-      // stretched signal is tagged through AbortSignal.any, so the guard below
-      // fails if the held request's signal didn't carry one (a moved or
-      // renamed deadline), instead of the test silently flaking again.
+      // request restores the originals, leaving later deadlines real. (10 s
+      // deadlines created before that decode keep their stretched timer after
+      // the restore, and if the decode never fires the patch dies with the
+      // page.) Each stretched signal is tagged through AbortSignal.any, so the
+      // guard below fails if the held request's signal didn't carry one (a
+      // moved or renamed deadline), instead of the test silently flaking again.
       await page.addInitScript(() => {
         const { timeout, any } = AbortSignal;
         const realFetch = window.fetch;
@@ -101,8 +103,9 @@ for (const cachedStartup of [false, true]) {
           return signal;
         };
         AbortSignal.any = (signals) => {
-          const signal = any.call(AbortSignal, signals);
-          if ([...signals].some((input) => stretched.has(input)))
+          const inputs = [...signals];
+          const signal = any.call(AbortSignal, inputs);
+          if (inputs.some((input) => stretched.has(input)))
             stretched.add(signal);
           return signal;
         };
