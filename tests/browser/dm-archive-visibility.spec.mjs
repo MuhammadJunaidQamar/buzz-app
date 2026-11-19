@@ -40,6 +40,7 @@ test("archived one-to-one DMs leave the sidebar while history and open drafts su
   const archiveReads = () =>
     app.report.queries.filter(({ filter }) => filter.kinds?.includes(13535))
       .length;
+  expect(archiveReads()).toBe(1);
   const refresh = async (keys) => {
     const before = archiveReads();
     app.setArchivedIdentities(keys);
@@ -48,6 +49,7 @@ test("archived one-to-one DMs leave the sidebar while history and open drafts su
     await expect
       .poll(() => app.relay.hasRoute("primary", "dm-peer"))
       .toBe(true);
+    expect(archiveReads()).toBe(before + 1);
   };
   await refresh([app.participants[0]]);
   await expect(dm).toHaveCount(0);

@@ -385,6 +385,59 @@ function transportArchivedDmFixture(initiallyArchived = false) {
 }
 
 it.each([false, true])(
+  "keeps one startup archive read across the first connection (pending %s)",
+  async (pending) => {
+    const f = transportArchivedDmFixture(true);
+    let finish!: (events: ReturnType<typeof f.archiveSnapshot>[]) => void;
+    if (pending)
+      f.read.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+    render(f.view("active"));
+    await waitFor(() => expect(f.read).toHaveBeenCalledTimes(1));
+    if (!pending)
+      await waitFor(() =>
+        expect(f.session.archives.snapshot().status).toBe("ready"),
+      );
+    const signal = f.signals[0];
+    f.state("connected");
+    if (pending) {
+      expect(signal?.aborted).toBe(false);
+      await act(async () => finish([f.archiveSnapshot()]));
+    }
+    await waitFor(() =>
+      expect(f.session.archives.snapshot().status).toBe("ready"),
+    );
+    expect(f.read).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(f.row("retired")).toBeNull());
+  },
+);
+
+it("demands one archive read per reconnect and none while disconnected", async () => {
+  const f = transportArchivedDmFixture(true);
+  f.state("connected");
+  render(f.view("active"));
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  expect(f.read).toHaveBeenCalledTimes(1);
+  f.state("retrying");
+  expect(f.session.archives.snapshot().status).toBe("paused");
+  await act(() => f.session.archives.ensure());
+  expect(f.read).toHaveBeenCalledTimes(1);
+  f.state("connected");
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  expect(f.read).toHaveBeenCalledTimes(2);
+  f.state("connected");
+  expect(f.read).toHaveBeenCalledTimes(2);
+});
+
+it.each([false, true])(
   "recovers archive visibility through the transport after an exhausted outage (%s)",
   async (initial) => {
     const f = transportArchivedDmFixture(initial);
@@ -401,6 +454,10 @@ it.each([false, true])(
       f.read.mockRejectedValue(new ReadError("unavailable", "offline", 503));
       f.state("retrying");
       await act(() => vi.advanceTimersByTimeAsync(3_500));
+      expect(f.session.archives.snapshot().status).toBe("paused");
+      expect(f.read).toHaveBeenCalledTimes(before);
+      f.state("connected");
+      await act(() => vi.advanceTimersByTimeAsync(3_500));
       expect(f.session.archives.snapshot().status).toBe("error");
       expect(f.read).toHaveBeenCalledTimes(before + 4);
       expect(!!f.row("retired")).toBe(!initial);
@@ -410,6 +467,7 @@ it.each([false, true])(
     }
     f.setArchived(!initial);
     f.read.mockImplementation(async () => [f.archiveSnapshot()]);
+    f.state("retrying");
     f.state("connected");
     await waitFor(() =>
       expect(f.session.archives.snapshot().status).toBe("ready"),
@@ -492,11 +550,17 @@ it("retires an outage archive read still pending when the transport reconnects",
         finish = resolve;
       }),
   );
-  f.state("retrying");
+  let refresh!: Promise<void>;
+  act(() => {
+    refresh = f.session.archives.refresh();
+  });
   await waitFor(() =>
     expect(f.session.archives.snapshot().status).toBe("loading"),
   );
   const signal = f.signals.at(-1);
+  f.state("retrying");
+  expect(signal?.aborted).toBe(true);
+  expect(f.session.archives.snapshot().status).toBe("paused");
   f.setArchived(false);
   f.state("connected");
   await waitFor(() =>
@@ -505,6 +569,7 @@ it("retires an outage archive read still pending when the transport reconnects",
   expect(signal?.aborted).toBe(true);
   await waitFor(() => expect(f.row("retired")).not.toBeNull());
   await act(async () => finish([stale]));
+  await refresh;
   expect(f.session.archives.snapshot().archived).toEqual([]);
 });
 

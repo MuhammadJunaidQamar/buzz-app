@@ -13,7 +13,7 @@ import type { RelayReader } from "./reader";
 import type { RelayWriter } from "./transport";
 
 export type IdentityArchiveSnapshot = Readonly<{
-  status: "unavailable" | "idle" | "loading" | "ready" | "error";
+  status: "unavailable" | "idle" | "paused" | "loading" | "ready" | "error";
   archived: readonly string[];
   eventId?: string;
   createdAt?: number;
@@ -333,10 +333,14 @@ export function createIdentityArchives(
     publish({ status: stop(), archived: empty });
   }
   /** Invalidates freshness and in-flight work; relay-wide visibility stays
-   * known until the next ensure() replaces it. Never access evidence. */
-  function stale() {
+   * known until the next ensure() replaces it. Paused demand waits for the
+   * connection owner to resume idle. Never access evidence. */
+  function stale(
+    next: "idle" | "paused" = snapshot.status === "paused" ? "paused" : "idle",
+  ) {
     const { error: _, transient: __, retryAt: ___, ...known } = snapshot;
-    publish({ ...known, status: stop() });
+    const status = stop();
+    publish({ ...known, status: status === "idle" ? next : status });
   }
   return {
     queries: Object.freeze({

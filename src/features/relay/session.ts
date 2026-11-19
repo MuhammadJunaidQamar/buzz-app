@@ -2636,6 +2636,7 @@ export function createRelaySession(
             const state = archives.queries.snapshot();
             if (
               state.status !== "idle" &&
+              state.status !== "paused" &&
               state.status !== "unavailable" &&
               Date.now() >= (state.retryAt ?? 0)
             )
@@ -4110,13 +4111,14 @@ export function createRelaySession(
         typing.clear();
         memories.clear();
       }
-      // An outage read may have exhausted retries or still be pending.
-      // A demanding surface must start again on the recovered connection.
+      // Resume once per reconnect. A first connection can reuse a startup
+      // read already in flight or ready; only its failure needs restarting.
       if (
         snapshot.status === "connected" &&
-        liveSnapshot.status !== "connected"
+        liveSnapshot.status !== "connected" &&
+        (liveGeneration > 0 || archives.queries.snapshot().status === "error")
       )
-        archives.stale();
+        archives.stale("idle");
       if (
         snapshot.status !== "connected" &&
         liveSnapshot.status === "connected"
@@ -4133,7 +4135,7 @@ export function createRelaySession(
         requests.invalidate();
         repositories.clearHomes();
         agentLibrary.clear();
-        archives.stale();
+        archives.stale("paused");
         workflows.interrupt();
         streamDropped = true;
         channels.staleHeads();

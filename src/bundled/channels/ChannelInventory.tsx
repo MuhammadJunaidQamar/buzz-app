@@ -411,7 +411,8 @@ export function ChannelInventory({
     newMessage(target.route?.params) !== undefined;
   const preparingDm = composingMessage ? handoff?.preparingDm : undefined;
   const regions = useSoloNavigation(queries);
-  const { archived } = useMentionArchives(queries, true);
+  // Initial roster reconciliation can retire reads; demand after it settles.
+  const { archived } = useMentionArchives(queries, list.status === "ready");
   const archivedKeys = useMemo(() => new Set(archived), [archived]);
   const sidebarChannels = useMemo(
     () =>
