@@ -3634,11 +3634,8 @@ export function apply(ctx: Context) {
       // request is already checked and has its timeoutMs; signal aborts at it.
       return { outcome: "answered", model: "example-1", answers: {} };
     },
-    // Optional: whether it can be chosen and set up for a community, and
-    // which setup (such as an account) the community uses. Communities with
-    // the same scope share one setup.
+    // Optional: whether it can be chosen and set up for a community.
     offered: (community) => true,
-    setupScope: (community) => undefined,
     // Shown in Settings for each community that chose it, such as why it
     // can't answer there; without communities, once.
     Settings: ({ active, community }) => null,
@@ -3655,7 +3652,7 @@ that were not asked are dropped.
 
 Settings > Decisions API lists each joined community with a menu of the
 providers `offered` there, and below it the chosen provider's `Settings` for
-that community, noting the other communities that share its setup. The user
+that community. The user
 chooses a provider for each community, or Off, which asks no provider there
 and lets none answer in its place: `backend` is undefined and `status`
 `unavailable`. Choices are kept on this device, by the

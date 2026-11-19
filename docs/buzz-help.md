@@ -1837,7 +1837,7 @@ tab, asks **Discard changes?** first; **Keep editing** keeps them.
   answer there. Builderlab is offered where the community has a Builderlab
   sign-in server. You sign in to that server in Builderlab's own settings;
   communities on the same server share that sign-in, so their availability
-  matches, and Settings names them. TypeSafe's API key is one
+  matches. TypeSafe's API key is one
   key that every community using TypeSafe shares. Until you choose, a
   community uses Builderlab where it is offered and TypeSafe elsewhere. When
   the provider a community uses cannot answer (for example Builderlab is not
