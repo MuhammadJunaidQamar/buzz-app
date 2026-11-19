@@ -884,7 +884,10 @@ and are asked to sign in again in Buzz.
   attach and a notice says how many were left out and why, naming the first few.
   If an upload fails, its attachment shows the reason, **Retry**, and
   **Remove**. Follow the error's guidance before retrying, or remove the attachment
-  to unblock Send; your typed message stays in the composer. In the main window,
+  to unblock Send; your typed message stays in the composer. The relay decides
+  which file types it accepts when a file uploads. If it refuses a file's type,
+  a notice names the file, and its attachment offers only **Remove**, because
+  retrying the same file cannot succeed. In the main window,
   files still uploading when you press **Send** finish in the background: the
   upload bar names the conversation they are going to, and **Cancel** stops the
   send it names. If a background send fails, its notice names that conversation
