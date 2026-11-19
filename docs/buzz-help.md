@@ -887,7 +887,8 @@ and are asked to sign in again in Buzz.
   to unblock Send; your typed message stays in the composer. The relay decides
   which file types it accepts when a file uploads. If it refuses a file's type,
   a notice names the file, and its attachment offers only **Remove**, because
-  retrying the same file cannot succeed. In the main window,
+  retrying the same file cannot succeed. For a conversation in a tab you are
+  not looking at, the notice waits until you return to it. In the main window,
   files still uploading when you press **Send** finish in the background: the
   upload bar names the conversation they are going to, and **Cancel** stops the
   send it names. If a background send fails, its notice names that conversation
