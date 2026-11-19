@@ -78,9 +78,8 @@ Pass the complete link to the tool; these are not published-note names or messag
   page does not replace a direct lookup when the person supplied a full link.
 - **Create:** `page_set` with a new UUID `id`, a `title` and `text` or `path`;
   omit `channel` and `revision`. Reuse the same UUID on retries. Initially only
-  the owner and verified creating agent have access. The creating agent has
-  editing access, not Admin. The owner can share the doc, or grant the agent
-  **Admin** using the **Share doc** dialog before asking it to share.
+  the owner and verified creating agent have access. Ask the owner to use
+  **Share doc** when someone else needs access.
 - **History:** `page_history` with `id` and `channel`; use the returned paging
   information. To restore an older live version, save its title and Markdown
   with `page_set` against the current revision.
@@ -89,11 +88,6 @@ Pass the complete link to the tool; these are not published-note names or messag
 - **Restore a deleted doc:** read retained content with `page_history`, then
   call `page_delete` with the current address/revision, `restore: true`, `title`
   and `text` containing the chosen retained contents.
-- **Share:** `page_share` with `id`, `channel`, `pubkey` and
-  `access: "read" | "edit" | "remove"`. This requires the calling agent's
-  administration permission. Editing access alone does not allow sharing.
-  If needed, ask the owner to grant this agent **Admin** in **Share doc**.
-  Recipients can read retained history too.
 
 ## Missing tools or access
 

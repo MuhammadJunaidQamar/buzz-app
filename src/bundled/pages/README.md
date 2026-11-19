@@ -28,9 +28,9 @@ revision ID and date. Unsaved drafts are labelled separately from their saved ba
 Doc links open beside the conversation. Back and Forward restore the document;
 explicitly closing its tab retires that visit. A standalone link opens Docs.
 
-Agents use `page_help`, `page_get`, `page_set`, `page_history`, `page_delete` and
-`page_share`. They verify a save, return its Doc reference and update that same
-address on follow-ups. Creating a doc does not post a message or change sharing.
+Agents use `page_help`, `page_get`, `page_set`, `page_history` and `page_delete`.
+They verify a save, return its Doc reference and update that same address on
+follow-ups. Creating a doc does not post a message or change sharing.
 Tools must be available on the device running the agent. Canvas and the separate
 Shared notes reader use different content and tools; Docs does not migrate them.
 

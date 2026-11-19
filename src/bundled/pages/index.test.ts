@@ -55,7 +55,6 @@ it("owns only channel-backed note routes, tools and panels while preserving sepa
       "page_set",
       "page_history",
       "page_delete",
-      "page_share",
     ]);
     const background = await notesFixture();
     try {

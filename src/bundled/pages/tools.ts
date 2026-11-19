@@ -1,15 +1,7 @@
 import type { AddedTool } from "../../buzz-mcp/session-tools";
 import type { BuzzClient } from "../../buzz-mcp/client";
-import { eventDto } from "../../features/relay/events";
-import {
-  memberAuthority,
-  memberChangeConfirmed,
-} from "../../features/channel-members/administration-protocol";
 import {
   NoteConflict,
-  NOTE_KIND,
-  independentNoteStorage,
-  noteTag,
   noteAddress,
   noteUrl,
   noteMarkdownLink,
@@ -185,7 +177,7 @@ export function noteTools(
     ),
     tool(
       "page_set",
-      "Create or edit a live Markdown document; prefer this to .md attachments unless a file is requested. The result’s message is a ready-to-post Doc link. Verify with page_get, then reply using that link. To create, omit channel/revision and reuse a new UUID id on retries; only the owner and creating agent receive access. The owner shares or grants Admin in Share doc; page_share requires Admin. To edit, use channel/revision from page_get; on conflict read, merge and retry. Restore deleted docs with page_delete restore:true. Pass text or a UTF-8 path.",
+      "Create or edit a live Markdown document; prefer this to .md attachments unless a file is requested. The result’s message is a ready-to-post Doc link. Verify with page_get, then reply using that link. To create, omit channel/revision and reuse a new UUID id on retries; only the owner and creating agent receive access. Ask the owner to use Share doc if someone else needs access. To edit, use channel/revision from page_get; on conflict read, merge and retry. Restore deleted docs with page_delete restore:true. Pass text or a UTF-8 path.",
       { ...addressFields, revision: str, title: str, text: str, path: str },
       ["id", "title"],
       async (client, _context, args) => {
@@ -280,107 +272,6 @@ export function noteTools(
           ),
           community(client),
         );
-      },
-    ),
-    tool(
-      "page_share",
-      "Explicitly give a person/agent read or edit access to a connected doc, or remove them. Requires the calling agent’s channel administration permission; never borrows the owner’s authority. Readers receive retained history too.",
-      {
-        ...addressFields,
-        pubkey: str,
-        access: { type: "string", enum: ["read", "edit", "remove"] },
-      },
-      ["id", "channel", "pubkey", "access"],
-      async (client, _context, args) => {
-        const address = noteAddress(args);
-        await readNote(asReader(client), address);
-        const pubkey = string(args, "pubkey"),
-          access = string(args, "access");
-        if (
-          !/^[0-9a-f]{64}$/.test(pubkey) ||
-          !["read", "edit", "remove"].includes(access)
-        )
-          throw new Error("Invalid sharing request.");
-        const state = async () => {
-          const events = (
-            await client.query(
-              [39000, 39001, 39002].map((kind) => ({
-                kinds: [kind],
-                authors: [client.relayAuthor],
-                "#d": [address.channel],
-                limit: 1,
-                consistency: "strong",
-              })),
-            )
-          ).map(eventDto);
-          const metadata = events.find(
-            (event) =>
-              event.kind === 39000 &&
-              event.pubkey === client.relayAuthor &&
-              noteTag(event, "d") === address.channel,
-          );
-          if (!independentNoteStorage(address, metadata))
-            throw new Error("This doc does not use independent doc sharing.");
-          return {
-            metadata,
-            authority: memberAuthority(
-              events,
-              address.channel,
-              client.pubkey,
-              client.relayAuthor ?? "",
-            ),
-          };
-        };
-        const before = await state();
-        if (!before.authority.canManage)
-          throw new Error(
-            "This agent needs Admin access to administer doc sharing. Ask the owner to open Share doc and grant this agent Admin. Creating or editing a doc does not grant administration.",
-          );
-        if (
-          pubkey === client.pubkey ||
-          before.authority.roles[pubkey] === "owner"
-        )
-          throw new Error(
-            "page_share cannot change this agent’s own or the owner’s access.",
-          );
-        const heads = await client.query([
-          {
-            kinds: [NOTE_KIND],
-            "#h": [address.channel],
-            limit: 2,
-            consistency: "strong",
-          },
-        ]);
-        if (
-          heads.length !== 1 ||
-          !heads[0] ||
-          noteTag(heads[0], "d") !== address.id
-        )
-          throw new Error(
-            "This storage contains other docs. Create a separate working copy before sharing this doc.",
-          );
-        const role = access === "read" ? "guest" : "member";
-        await client.publish({
-          kind: access === "remove" ? 9001 : 9000,
-          content: "",
-          tags: [
-            ["h", address.channel],
-            ["p", pubkey],
-            ...(access === "remove" ? [] : [["role", role]]),
-          ],
-        });
-        const after = await state();
-        if (
-          !memberChangeConfirmed(after.authority, client.pubkey, {
-            pubkey,
-            expectedRole: before.authority.roles[pubkey] ?? "absent",
-            role: access === "remove" ? "remove" : role,
-          })
-        )
-          throw new Error(
-            "Sharing was not confirmed. Read access before retrying.",
-          );
-        return "Doc access updated.";
       },
     ),
   ];

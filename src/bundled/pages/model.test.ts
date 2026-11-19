@@ -352,16 +352,6 @@ describe("channel orchestration", () => {
     ).rejects.toThrow(/other docs/);
     const channel = f.channels.get(note.channel);
     if (!channel) throw new Error("Missing channel");
-    channel.roles[f.carl.pubkey] = "admin";
-    channel.updated++;
-    const share = f.tool("page_share");
-    await expect(
-      share.call(
-        f.client(),
-        {},
-        { ...note, pubkey: f.sam.pubkey, access: "read" },
-      ),
-    ).rejects.toThrow(/other docs/);
     expect(channel.roles[f.sam.pubkey]).toBeUndefined();
   });
   it("refuses creation recovery in storage already containing another page", async () => {
@@ -645,65 +635,6 @@ it("rejects foreign-community and malformed page links before querying", async (
     get.call(client, {}, { url: noteUrl(original, f.origin) }),
   ).rejects.toThrow(/unavailable/);
 });
-
-it("does not call the owner’s writer when an unauthorized agent asks to share", async () => {
-  const f = await fixture(),
-    note = f.seed("Plan", "Work");
-  const share = f.tool("page_share");
-  const spy = vi.spyOn(f.workspace, "setMember");
-  await expect(
-    share.call(
-      f.client(),
-      {},
-      { ...note, pubkey: f.sam.pubkey, access: "edit" },
-    ),
-  ).rejects.toThrow(/needs Admin.*Share doc.*grant this agent Admin/);
-  expect(spy).not.toHaveBeenCalled();
-  expect(f.channels.get(note.channel)?.roles[f.sam.pubkey]).toBeUndefined();
-});
-
-it("confirms explicit agent invitations using the relay's participating role", async () => {
-  const f = await fixture(),
-    note = f.seed("Plan", "Work", false);
-  await f.workspace.setMember(note, f.carl.pubkey, "admin");
-  const share = f.tool("page_share");
-  await expect(
-    share.call(
-      f.client(),
-      {},
-      { ...note, pubkey: f.ned.pubkey, access: "edit" },
-    ),
-  ).resolves.toBe("Doc access updated.");
-  expect(f.channels.get(note.channel)?.roles[f.ned.pubkey]).toBe("bot");
-});
-
-it.each(["person", "agent"])(
-  "changes existing %s access without borrowing the owner's writer",
-  async (target) => {
-    const f = await fixture();
-    const note = f.seed("Plan", "Work");
-    await f.workspace.setMember(note, f.carl.pubkey, "admin");
-    const client = f.client();
-    const share = f.tool("page_share");
-    const pubkey = target === "agent" ? f.ned.pubkey : f.sam.pubkey;
-    const start = f.accepted.length;
-    for (const access of ["read", "edit", "read", "remove"]) {
-      await share.call(client, {}, { ...note, pubkey, access });
-      expect(f.channels.get(note.channel)?.roles[pubkey]).toBe(
-        access === "read"
-          ? "guest"
-          : access === "remove"
-            ? undefined
-            : target === "agent"
-              ? "bot"
-              : "member",
-      );
-    }
-    expect(f.accepted.slice(start).map((e) => [e.kind, e.pubkey])).toEqual(
-      [9000, 9000, 9000, 9001].map((kind) => [kind, client.pubkey]),
-    );
-  },
-);
 
 it("gives agents an actionable deleted-page restore path", async () => {
   const f = await fixture();
