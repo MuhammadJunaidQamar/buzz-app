@@ -6,10 +6,7 @@ and can be disabled in Settings → Plugins.
 ## Getting started
 
 Open Docs from the dock to create a document or find a doc you can access.
-Your docs and docs created by your verified agents stay in the main collection.
-Open **Shared with me** for docs from other creators. Search applies to the open
-collection. Grouping does not change the creator, ownership or sharing settings.
-An agent doc stays in Shared with me until its ownership can be verified.
+The collection shows the docs you can read. Search by title or content.
 Loaded collections follow revisions and access changes.
 Revoked docs are removed. Deleted docs are hidden from ordinary agent lists and
 remain available through explicit reads, retained history and Show deleted.

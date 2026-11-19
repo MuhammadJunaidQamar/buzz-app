@@ -71,9 +71,6 @@ it("drops access lost between the finite read and follower attachment", async ()
   expect(f.result.current.collection.notes.map((note) => note.id)).toEqual([
     f.mine.id,
   ]);
-  expect(
-    f.result.current.collection.creators[f.shared.channel],
-  ).toBeUndefined();
   expect(f.liveChannels()).not.toContain(f.shared.channel);
 });
 
@@ -154,9 +151,6 @@ it.each([false, true])(
           f.result.current.collection.notes.map((note) => note.id),
         ).toEqual([f.mine.id]),
       );
-      expect(
-        f.result.current.collection.creators[f.shared.channel],
-      ).toBeUndefined();
       expect(signal?.aborted).toBe(true);
       act(() => f.result.current.changed(f.shared));
     } finally {
@@ -191,7 +185,6 @@ it("discards a changed head whose fresh read finishes after revocation", async (
   const extra = f.seed("Next page", "Keep too");
   vi.spyOn(f.workspace, "list").mockResolvedValueOnce({
     notes: [extra],
-    creators: { [extra.channel]: f.viewer.pubkey },
     more: false,
   });
   await act(async () => f.result.current.load(true));

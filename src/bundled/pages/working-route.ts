@@ -14,7 +14,6 @@ export type WorkingRoute = DocumentView & {
   draft?: string;
   query?: string;
   trash?: boolean;
-  folder?: "shared";
   community?: string;
 };
 export type OpenTarget = Parameters<Context["navigation"]["open"]>[0];
@@ -25,7 +24,6 @@ const keys = new Set([
   "draft",
   "query",
   "trash",
-  "folder",
   "edit",
   "dialog",
   "revision",
@@ -35,7 +33,9 @@ const keys = new Set([
 export function workingRoute(value: unknown): WorkingRoute | undefined {
   if (value === undefined) return { view: "browse" };
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
-  const row = { ...value } as Record<string, unknown>;
+  // Old history entries may still point to the retired Shared with me folder.
+  const { folder, ...row } = value as Record<string, unknown>;
+  if (folder !== undefined && folder !== "shared") return;
   if (
     Object.keys(row).some((key) => !keys.has(key)) ||
     !["browse", "page", "new"].includes(row.view as string)
@@ -59,7 +59,6 @@ export function workingRoute(value: unknown): WorkingRoute | undefined {
     (typeof row.query !== "string" || row.query.length > 512)
   )
     return;
-  if (row.folder !== undefined && row.folder !== "shared") return;
   for (const key of ["edit", "trash"]) {
     if (row[key] === "true") row[key] = true;
     else if (row[key] === "false") row[key] = false;

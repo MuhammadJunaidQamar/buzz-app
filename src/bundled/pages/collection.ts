@@ -10,7 +10,7 @@ import type { NotesPage, NotesWorkspace } from "./workspace";
 
 /** The Docs browser retains only the loaded, currently readable catalogue. */
 export function useNotesCollection(workspace: NotesWorkspace) {
-  const current = useRef<NotesPage>({ notes: [], creators: {}, more: false });
+  const current = useRef<NotesPage>({ notes: [], more: false });
   const [collection, publish] = useState(current.current);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -30,10 +30,7 @@ export function useNotesCollection(workspace: NotesWorkspace) {
   }, []);
   const remove = useCallback(
     (channels: readonly string[]) => {
-      if (
-        current.current.notes.some((note) => channels.includes(note.channel)) ||
-        channels.some((channel) => channel in current.current.creators)
-      )
+      if (current.current.notes.some((note) => channels.includes(note.channel)))
         cancelLoad();
       for (const channel of channels) {
         revoked.current.add(channel);
@@ -41,11 +38,6 @@ export function useNotesCollection(workspace: NotesWorkspace) {
       }
       setCollection((old) => ({
         ...old,
-        creators: Object.fromEntries(
-          Object.entries(old.creators).filter(
-            ([channel]) => !channels.includes(channel),
-          ),
-        ),
         notes: old.notes.filter((note) => !channels.includes(note.channel)),
       }));
     },
@@ -88,12 +80,7 @@ export function useNotesCollection(workspace: NotesWorkspace) {
         );
         // Discovery reads do not populate the host's hidden-channel routes.
         // Resolve this page in one batch before retaining/following its content.
-        const ids = [
-          ...new Set([
-            ...Object.keys(page.creators),
-            ...page.notes.map((note) => note.channel),
-          ]),
-        ];
+        const ids = [...new Set(page.notes.map((note) => note.channel))];
         if (ids.length)
           await workspace.session.channels.resolve?.(ids, {
             signal: controller.signal,
@@ -103,17 +90,9 @@ export function useNotesCollection(workspace: NotesWorkspace) {
         page.notes = page.notes.filter(
           (note) => !!workspace.session.channels.get?.(note.channel),
         );
-        page.creators = Object.fromEntries(
-          Object.entries(page.creators).filter(
-            ([channel]) => !!workspace.session.channels.get?.(channel),
-          ),
-        );
         for (const note of page.notes) revoked.current.delete(note.channel);
         setCollection((old) => ({
           ...page,
-          creators: more
-            ? { ...old.creators, ...page.creators }
-            : page.creators,
           notes: more
             ? [
                 ...new Map(
@@ -145,12 +124,7 @@ export function useNotesCollection(workspace: NotesWorkspace) {
       requests.clear();
     };
   }, [load]);
-  const channels = [
-    ...new Set([
-      ...Object.keys(collection.creators),
-      ...collection.notes.map((note) => note.channel),
-    ]),
-  ]
+  const channels = [...new Set(collection.notes.map((note) => note.channel))]
     .sort()
     .join(":");
   useLayoutEffect(() => {
@@ -203,5 +177,5 @@ export function useNotesCollection(workspace: NotesWorkspace) {
     if (denied.length) remove(denied);
     return stop;
   }, [workspace, channels, cancelLoad, changed, remove]);
-  return { collection, setCollection, loading, error, load, changed, remove };
+  return { collection, loading, error, load, changed, remove };
 }

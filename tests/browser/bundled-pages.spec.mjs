@@ -39,31 +39,20 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
     name: "Shared research",
     exact: true,
   });
-  await expect(shared).toHaveCount(0);
-  const folder = page.getByRole("button", {
-    name: "Shared with me",
+  await shared.click();
+  const sharedDoc = page.getByRole("article", {
+    name: "Shared research",
     exact: true,
   });
-  await folder.focus();
-  await folder.press("Enter");
-  await expect(
-    page.getByRole("button", { name: "Back to docs", exact: true }),
-  ).toBeFocused();
-  await shared.click();
-  await expect(
-    page.getByRole("article", { name: "Shared research", exact: true }),
-  ).toBeVisible();
+  await expect(sharedDoc).toBeVisible();
   await page.goBack();
-  await expect(
-    page.getByRole("list", { name: "Shared with me", exact: true }),
-  ).toBeVisible();
-  await page.goBack();
-  await expect(folder).toBeFocused();
-  await expect(shared).toHaveCount(0);
-  await page.goForward();
   await expect(shared).toBeVisible();
+  await page.goForward();
+  await expect(sharedDoc).toBeVisible();
   await page.getByRole("button", { name: "Back to docs", exact: true }).click();
-  await expect(folder).toBeFocused();
+  await expect(
+    page.getByRole("searchbox", { name: "Search docs" }),
+  ).toBeFocused();
   await page
     .getByRole("link", { name: "Connected pages plan", exact: true })
     .click();

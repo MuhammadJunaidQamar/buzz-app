@@ -1195,11 +1195,9 @@ keep editing while a save is in progress. Use Doc actions → Revision history t
 disable auto-save and use Save. Unsaved drafts survive browsing within the
 connected session and are cleared when you restart the app.
 
-The main collection keeps your docs together with docs created by your verified
-agents. Docs from other creators are in **Shared with me**; open that folder to
-search them. An agent doc stays there until ownership can be verified. These
-groups do not change creator attribution, ownership or access. Each doc row shows
-its last editor’s avatar beside the relative save time; hover for their name.
+The collection shows the docs you can read. Search by title or content. Each
+doc row shows its last editor’s avatar beside the relative save time. Hover for
+their name.
 Loaded collections follow saved revisions and access changes. Revoked docs are
 removed and deleted docs stay hidden unless you show deleted.
 

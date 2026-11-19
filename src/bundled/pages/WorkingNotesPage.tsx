@@ -17,7 +17,6 @@ import {
   noteAddress,
   noteUrl,
   parseNoteUrl,
-  type Note,
   type NoteAddress,
 } from "./model";
 import type { NotesWorkspace } from "./workspace";
@@ -162,27 +161,15 @@ export function WorkingNotesCommunity({
     [destination],
   );
   const searchRef = useRef<HTMLElement>(null);
-  const { collection, setCollection, loading, error, load, changed, remove } =
+  const { collection, loading, error, load, changed, remove } =
     useNotesCollection(workspace);
   const [query, setQuery] = useState(destination?.query ?? "");
   const [trash, setTrash] = useState(destination?.trash ?? false);
-  const [folder, setFolder] = useState(destination?.folder);
   const { profiles, viewer } = workspace.session;
-  const creators = useMemo(
-    () =>
-      [...new Set(Object.values(collection.creators))]
-        .filter((creator) => creator !== viewer)
-        .sort(),
-    [collection.creators, viewer],
-  );
   const identities = useMemo(
-    () => [
-      ...new Set([
-        ...creators,
-        ...collection.notes.map((note) => note.event.pubkey).sort(),
-      ]),
-    ],
-    [creators, collection.notes],
+    () =>
+      [...new Set(collection.notes.map((note) => note.event.pubkey))].sort(),
+    [collection.notes],
   );
   const profileMap = useSyncExternalStore(
     profiles.subscribe,
@@ -194,19 +181,12 @@ export function WorkingNotesCommunity({
     void generation;
     const release = profiles.reserve?.(identities.length);
     // Use the shared directory's budget and de-duplicated background reads.
-    // Missing ownership evidence leaves a document in Shared with me;
-    // missing editor profiles use public-key labels.
+    // Missing editor profiles use public-key labels.
     void profiles
       .ensure(identities.slice(0, profiles.limit?.()), "background")
       .catch(() => {});
     return release;
   }, [profiles, identities, generation]);
-  const readOwned = () =>
-    creators
-      .filter((creator) => viewer && profiles.owner?.(creator) === viewer)
-      .join(":");
-  const owned = useSyncExternalStore(profiles.subscribe, readOwned, readOwned);
-  const mainCreators = new Set([viewer, ...owned.split(":").filter(Boolean)]);
   const drafts = useRef(new Map<string, NewDraft>());
   const createdDrafts = useRef(new Map<string, NoteAddress>());
   const createdFocus = useRef(new Map<string, NoteFocus>());
@@ -260,14 +240,13 @@ export function WorkingNotesCommunity({
         ...(dialog ? { dialog } : {}),
         query,
         trash,
-        ...(folder ? { folder } : {}),
       },
       replace,
     );
   };
   const browse = () => {
     setSelected("browse");
-    visit({ view: "browse", query, trash, ...(folder ? { folder } : {}) });
+    visit({ view: "browse", query, trash });
     requestAnimationFrame(() => searchRef.current?.focus());
   };
   const newNote = (draft: Omit<NewDraft, "id">) => {
@@ -279,7 +258,6 @@ export function WorkingNotesCommunity({
       draft: next.id,
       query,
       trash,
-      ...(folder ? { folder } : {}),
     });
   };
   useEffect(() => {
@@ -288,7 +266,6 @@ export function WorkingNotesCommunity({
     if (destination) {
       setQuery(destination.query ?? "");
       setTrash(destination.trash ?? false);
-      setFolder(destination.folder);
       if (destination.view === "new" && destination.draft) {
         const created = createdDrafts.current.get(destination.draft);
         if (created) {
@@ -308,8 +285,6 @@ export function WorkingNotesCommunity({
     }
   }, [initial, destination, reveal, visit]);
   const visible = collection.notes.filter((note) => trash || !note.deleted);
-  const isMain = (note: Note) =>
-    mainCreators.has(collection.creators[note.channel] ?? "");
   return (
     <NotesPage
       community={workspace.session.scope.replace(/:[0-9a-f]{64}$/, "")}
@@ -329,7 +304,6 @@ export function WorkingNotesCommunity({
         selected,
         query,
         trash,
-        folder,
         searchRef,
         loading,
         more: collection.more,
@@ -351,12 +325,6 @@ export function WorkingNotesCommunity({
             trash: value,
           });
         },
-        showShared: (shared) => {
-          const next = shared ? "shared" : undefined;
-          setFolder(next);
-          setQuery("");
-          visit({ view: "browse", trash, ...(next ? { folder: next } : {}) });
-        },
         create: () => newNote({ title: "", markdown: "" }),
         refresh: () => {
           void load();
@@ -365,10 +333,7 @@ export function WorkingNotesCommunity({
           void load(true);
         },
         browse,
-        entries: visible.filter((note) =>
-          folder ? !isMain(note) : isMain(note),
-        ),
-        sharedCount: visible.filter((note) => !isMain(note)).length,
+        entries: visible,
         canFilter: !!collection.notes.length || trash,
         open,
         items: [
@@ -399,7 +364,6 @@ export function WorkingNotesCommunity({
                             ...noteAddress(address),
                             query,
                             trash,
-                            ...(folder ? { folder } : {}),
                             ...view,
                           })
                       : undefined
@@ -428,13 +392,6 @@ export function WorkingNotesCommunity({
                   createdAutoSave.current.set(noteKey(note), autoSave);
                   createdDrafts.current.set(draft.id, noteAddress(note));
                   drafts.current.delete(draft.id);
-                  setCollection((old) => ({
-                    ...old,
-                    creators: {
-                      ...old.creators,
-                      [note.channel]: workspace.session.viewer ?? "",
-                    },
-                  }));
                   changed(note);
                   if (selectedRef.current === `new:${draft.id}`)
                     open(note, true, share ? "share" : undefined);

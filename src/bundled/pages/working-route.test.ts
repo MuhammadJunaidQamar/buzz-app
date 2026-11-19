@@ -16,8 +16,6 @@ const target = {
 it("round-trips browser, editor, dialog, revision and new-draft addresses without content", () => {
   for (const value of [
     { view: "browse", query: "Research", trash: true },
-    { view: "browse", folder: "shared", query: "Plan" },
-    { view: "page", folder: "shared", id, channel, edit: true },
     { view: "page", id, channel, edit: true, dialog: "link" },
     {
       view: "page",
@@ -53,6 +51,12 @@ it("round-trips browser, editor, dialog, revision and new-draft addresses withou
   });
   expect(workingRoute({ id, channel })).toBeUndefined();
   expect(workingRoute({ view: "note", id, channel })).toBeUndefined();
+});
+it.each([
+  { view: "browse", query: "Plan", trash: true },
+  { view: "page", id, channel, edit: true },
+])("normalizes legacy Docs folder routes: %o", (route) => {
+  expect(workingRoute({ ...route, folder: "shared" })).toEqual(route);
 });
 it.each([
   { author: "b".repeat(64), note: `30023:${"b".repeat(64)}:note` },
