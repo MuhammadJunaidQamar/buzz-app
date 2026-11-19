@@ -1839,14 +1839,14 @@ tab, asks **Discard changes?** first; **Keep editing** keeps them.
   communities on the same server share that sign-in, so their availability
   matches, and Settings names them. TypeSafe's API key is one
   key that every community using TypeSafe shares. Until you choose, a
-  community uses Builderlab where it can answer and TypeSafe elsewhere. While
-  a chosen Builderlab cannot answer in a community (not signed in, or the
-  account cannot use decisions), your TypeSafe key answers there, and the row
-  says so. A Builderlab account without decisions access says to contact your
-  account administrator.
+  community uses Builderlab where it is offered and TypeSafe elsewhere. When
+  the provider a community uses cannot answer (for example Builderlab is not
+  signed in there, or the account cannot use decisions), decisions there fail
+  and the row says why: no other provider answers in its place. A Builderlab
+  account without decisions access says to contact your account
+  administrator.
   Choose **Off** for a community to turn decisions off there, for example
-  where they are billed and you don't want to use them: no provider is asked,
-  and TypeSafe does not answer in its place.
+  where they are billed and you don't want to use them: no provider is asked.
 - In **Settings → Decisions API**, TypeSafe’s saved API key stays masked. Its
   chevron menu offers **Replace / Remove**. Replacement starts blank and masked,
   with inline **Cancel / Save** controls. **Save** stays disabled until you enter

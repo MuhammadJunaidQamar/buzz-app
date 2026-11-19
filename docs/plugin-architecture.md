@@ -3659,19 +3659,16 @@ that community, noting the other communities that share its setup. The user
 chooses a provider for each community, or Off, which asks no provider there
 and lets none answer in its place: `backend` is undefined and `status`
 `unavailable`. Choices are kept on this device, by the
-community's relay host. Each request is routed in its `community`. Until the
-user chooses for that community, the first default provider that is on and can
-answer there (`ready` or `unconfirmed`) does: Builderlab
-(`block.builderlab/builderlab`), then TypeSafe (`buzz.typesafe/typesafe`).
-When none can, TypeSafe is the provider, and the status is `checking` while
-another default is still finding out whether it can answer. The same holds
-while a chosen default is not on. Where a chosen Builderlab cannot answer,
-TypeSafe, the user's own key, answers instead. A request without a community
-uses a provider chosen before per-community choices, if any, or the defaults;
-Builderlab never answers it. Decision text can include private messages, so no
-other provider gets it without that choice: while a chosen provider that is
-not a default is not on, decisions there are `unavailable` and are not sent to
-another provider. `ctx.decisions.backend(community?)` is the key
+community's relay host. Each request is routed in its `community`, to the
+provider chosen for that community, or one chosen before per-community
+choices. Until the user chooses, the first default provider that is on and
+`offered` there answers: Builderlab (`block.builderlab/builderlab`), then
+TypeSafe (`buzz.typesafe/typesafe`). `offered()` with no community says
+whether it serves a request that names none; Builderlab does not. The
+routed provider answers whatever its status: when it cannot (`needs-setup`),
+or a chosen provider is not on, decisions there fail, and no other provider
+answers in its place. Decision text can include private messages, so no
+provider gets it without that choice or default. `ctx.decisions.backend(community?)` is the key
 (`<plugin id>/<provider id>`) of the provider that answers in that community,
 or undefined when none is on, and `ctx.decisions.status(community?)` its
 status. `Decisions` exposes no way to choose the provider. `state` and every
