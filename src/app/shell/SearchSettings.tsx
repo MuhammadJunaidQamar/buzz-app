@@ -7,6 +7,7 @@ import { MatchRank, matchName, matchRank } from "../../features/search/match";
 import { settingsSections } from "../settings-sections";
 import { PreferenceRow } from "../../shared/design-system/ui/PreferenceRow";
 import { SwitchPreferenceRow } from "../../shared/design-system/ui/SwitchPreferenceRow";
+import { Switch } from "../../shared/design-system/ui/Switch";
 import { Select } from "../../shared/design-system/ui/Select";
 import { Button } from "../../shared/design-system/ui/Button";
 
@@ -393,20 +394,28 @@ function NotificationPreference({
   const key = entry.id === "sound" ? "sound" : "notifyWhileViewing";
   return (
     <>
-      <SwitchPreferenceRow
+      {/* The row still opens Settings when alerts are off or paused, so only
+       * the switch is disabled; a disabled row would dim text that navigates. */}
+      <PreferenceRow
         variant="search"
         icon={<GearIcon size={21} />}
-        label={entry.label}
-        description={
+        title={entry.label}
+        subtitle={
           state.developmentPaused
             ? entry.section + " · Paused in this development build"
             : entry.section
         }
-        checked={state.preferences[key]}
-        disabled={state.developmentPaused || !state.preferences.enabled}
-        onCheckedChange={(value) =>
-          notifications.updatePreferences({ [key]: value })
-        }
+        trailing={(labelProps) => (
+          <Switch
+            {...labelProps}
+            aria-label={entry.label}
+            checked={state.preferences[key]}
+            disabled={state.developmentPaused || !state.preferences.enabled}
+            onCheckedChange={(value) =>
+              notifications.updatePreferences({ [key]: value })
+            }
+          />
+        )}
       />
       {state.preferencesError && (
         <p role="alert" className="text-body-sm text-subtle">

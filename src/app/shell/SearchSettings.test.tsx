@@ -35,9 +35,9 @@ afterEach(() => {
   Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
 });
 
-function fixture() {
+function fixture({ enabled = true } = {}) {
   const state = {
-    preferences: { enabled: true, sound: true, notifyWhileViewing: false },
+    preferences: { enabled, sound: true, notifyWhileViewing: false },
     developmentPaused: false,
   };
   const updatePreferences = vi.fn();
@@ -98,6 +98,28 @@ it("changes the trailing switch inline but opens and highlights the setting from
   } finally {
     target.remove();
   }
+});
+
+it("disables only the switch while Desktop alerts are off, so the row still opens Settings", () => {
+  const { Palette, open, close } = fixture({ enabled: false });
+  render(<Palette />);
+  const row = screen.getByRole("row", { name: "Sound — Notifications" });
+  expect(row.querySelector(".buzz-preference-row")).not.toHaveAttribute(
+    "data-disabled",
+  );
+  expect(screen.getByRole("switch", { name: "Sound" })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  const input = screen.getByRole("combobox", { name: "Search Buzz" });
+  expect(input).toHaveAttribute("aria-activedescendant", row.id);
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(open).toHaveBeenCalledWith({
+    version: 1,
+    kind: "settings",
+    section: "notifications",
+  });
+  expect(close).toHaveBeenCalledOnce();
 });
 
 it("retains inline matches and keyboard selection when conversation results arrive", () => {
