@@ -621,39 +621,64 @@ test("media comments keep a finished step's spacing when its details open", asyn
     name: /Rechecking the second cut/,
   });
   const entry = step.locator("[data-message-id]").first();
-  const gaps = async () => {
-    const [above, line, box, below] = await Promise.all(
-      [rows.nth(1), disclosure, entry, rows.nth(3)].map((part) =>
-        part.evaluate((node) => {
-          const rect = node.getBoundingClientRect();
-          const style = getComputedStyle(node);
-          // The row's content box: its own spacing is what is measured.
-          return {
-            top: rect.top + Number.parseFloat(style.paddingTop),
-            bottom: rect.bottom - Number.parseFloat(style.paddingBottom),
-            edge: [rect.top, rect.bottom],
-          };
-        }),
-      ),
-    );
-    return {
-      above: Math.round((line.edge[0] - above.bottom) * 2) / 2,
-      below: Math.round((below.top - box.edge[1]) * 2) / 2,
-    };
-  };
+  // One read of one layout. The details open and close over a height
+  // transition and are removed when the close ends, which shortens the line
+  // in a single step; separate reads can land on either side of that step.
+  const read = () =>
+    rows.evaluateAll((nodes) => {
+      const step = nodes[2];
+      const line = step.querySelector("button[aria-expanded]");
+      const box = step
+        .querySelector("[data-message-id]")
+        .getBoundingClientRect();
+      const panel = step.querySelector('[class*="audienceBody"]');
+      // The row's content box: its own spacing is what is measured.
+      const content = (node) => {
+        const rect = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        return {
+          top: rect.top + Number.parseFloat(style.paddingTop),
+          bottom: rect.bottom - Number.parseFloat(style.paddingBottom),
+        };
+      };
+      const moving =
+        panel?.hasAttribute("data-starting-style") ||
+        step.getAnimations({ subtree: true }).length > 0;
+      return {
+        // Settled closed: the details are gone. Settled open: they are in
+        // place and nothing in the row is still animating.
+        state:
+          line.getAttribute("aria-expanded") === "true"
+            ? moving
+              ? "opening"
+              : "open"
+            : panel
+              ? "closing"
+              : "closed",
+        above:
+          Math.round(
+            (line.getBoundingClientRect().top - content(nodes[1]).bottom) * 2,
+          ) / 2,
+        below: Math.round((content(nodes[3]).top - box.bottom) * 2) / 2,
+      };
+    });
   for (const density of ["default", "compact"]) {
     await page.evaluate((density) => {
       document.documentElement.dataset.messageDensity = density;
     }, density);
-    await expect(disclosure, density).toHaveAttribute("aria-expanded", "false");
-    const closed = await gaps();
+    await expect
+      .poll(async () => (await read()).state, { message: density })
+      .toBe("closed");
+    const closed = await read();
+    expect(closed.state, density).toBe("closed");
     await disclosure.click();
-    await expect(disclosure, density).toHaveAttribute("aria-expanded", "true");
     await expect(
       entry.getByText("Rechecking the second cut").last(),
       density,
     ).toBeVisible();
-    await expect.poll(gaps, { message: density }).toEqual(closed);
+    await expect
+      .poll(read, { message: density })
+      .toEqual({ ...closed, state: "open" });
     await disclosure.click();
     await expect(disclosure, density).toHaveAttribute("aria-expanded", "false");
   }
