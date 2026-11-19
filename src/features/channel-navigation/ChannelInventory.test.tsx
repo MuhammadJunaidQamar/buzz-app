@@ -321,14 +321,14 @@ function archivedDmFixture(initiallyArchived = false) {
   ]);
   let archived = initiallyArchived;
   let time = 0;
-  const read = vi.fn(async () => [
+  const snapshot = () =>
     signed(authority, {
       kind: 13535,
       created_at: ++time,
       content: "",
       tags: [["-"], ...(archived ? [["p", retired]] : [])],
-    }),
-  ]);
+    });
+  const read = vi.fn(async () => [snapshot()]);
   const owner = createIdentityArchives({ read }, authority.pubkey);
   owners.push(owner);
   f.session.archives = owner.queries;
@@ -337,6 +337,11 @@ function archivedDmFixture(initiallyArchived = false) {
     read,
     owner,
     retired,
+    authority,
+    archiveSnapshot: snapshot,
+    setArchived(value: boolean) {
+      archived = value;
+    },
     async archive(value: boolean) {
       archived = value;
       await act(() => owner.queries.refresh());
@@ -345,6 +350,192 @@ function archivedDmFixture(initiallyArchived = false) {
       document.querySelector<HTMLElement>(`[data-channel-id="${id}"]`),
   };
 }
+
+function transportArchivedDmFixture(initiallyArchived = false) {
+  const f = archivedDmFixture(initiallyArchived);
+  let live!: LiveCallbacks;
+  const signals: (AbortSignal | undefined)[] = [];
+  const transportOwner = createRelaySession({
+    viewer: f.session.viewer,
+    relayAuthor: f.authority.pubkey,
+    archiveAuthority: f.authority.pubkey,
+    media: () => undefined,
+    query: async (filters, signal) => {
+      if (!filters.some((filter) => filter.kinds?.includes(13535))) return [];
+      signals.push(signal);
+      return f.read();
+    },
+    subscribe(callbacks) {
+      live = callbacks;
+      return { update() {}, retry() {}, dispose() {} };
+    },
+  });
+  owners.push(transportOwner);
+  f.session.archives = transportOwner.session.archives;
+  return {
+    ...f,
+    signals,
+    state(status: Parameters<LiveCallbacks["state"]>[0]["status"]) {
+      act(() => live.state({ status, routes: [] }));
+    },
+    roster(members: string[], time: number) {
+      act(() => live.receive([roster(f.authority, "beta", members, time)]));
+    },
+  };
+}
+
+it.each([false, true])(
+  "recovers archive visibility through the transport after an exhausted outage (%s)",
+  async (initial) => {
+    const f = transportArchivedDmFixture(initial);
+    f.state("connected");
+    render(f.view("active"));
+    await waitFor(() =>
+      expect(f.session.archives.snapshot().status).toBe("ready"),
+    );
+    await waitFor(() => expect(!!f.row("retired")).toBe(!initial));
+    const before = f.read.mock.calls.length;
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    try {
+      f.read.mockRejectedValue(new ReadError("unavailable", "offline", 503));
+      f.state("retrying");
+      await act(() => vi.advanceTimersByTimeAsync(3_500));
+      expect(f.session.archives.snapshot().status).toBe("error");
+      expect(f.read).toHaveBeenCalledTimes(before + 4);
+      expect(!!f.row("retired")).toBe(!initial);
+    } finally {
+      random.mockRestore();
+      vi.useRealTimers();
+    }
+    f.setArchived(!initial);
+    f.read.mockImplementation(async () => [f.archiveSnapshot()]);
+    f.state("connected");
+    await waitFor(() =>
+      expect(f.session.archives.snapshot().status).toBe("ready"),
+    );
+    await waitFor(() => expect(!!f.row("retired")).toBe(initial));
+    const recovered = f.read.mock.calls.length;
+    f.state("connected");
+    expect(f.read).toHaveBeenCalledTimes(recovered);
+  },
+);
+
+it("recovers startup archive failure when the transport first connects", async () => {
+  const f = transportArchivedDmFixture(true);
+  f.state("retrying");
+  f.read.mockRejectedValue(new ReadError("unavailable", "offline", 503));
+  const random = vi.spyOn(Math, "random").mockReturnValue(0);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  try {
+    render(f.view("active"));
+    await act(() => vi.advanceTimersByTimeAsync(3_500));
+    expect(f.session.archives.snapshot().status).toBe("error");
+    expect(f.read).toHaveBeenCalledTimes(4);
+    expect(f.row("retired")).not.toBeNull();
+  } finally {
+    random.mockRestore();
+    vi.useRealTimers();
+  }
+  f.read.mockImplementation(async () => [f.archiveSnapshot()]);
+  f.state("connected");
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  await waitFor(() => expect(f.row("retired")).toBeNull());
+});
+
+it("recovers exhausted HTTP archive reads while the transport remains connected", async () => {
+  const f = transportArchivedDmFixture(true);
+  f.state("connected");
+  render(f.view("active"));
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  await waitFor(() => expect(f.row("retired")).toBeNull());
+  const random = vi.spyOn(Math, "random").mockReturnValue(0);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  try {
+    f.read.mockRejectedValue(new ReadError("unavailable", "offline", 503));
+    f.state("retrying");
+    f.state("connected");
+    await act(() => vi.advanceTimersByTimeAsync(3_500));
+    expect(f.session.archives.snapshot()).toMatchObject({
+      status: "error",
+      transient: true,
+    });
+    f.setArchived(false);
+    f.read.mockImplementation(async () => [f.archiveSnapshot()]);
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    expect(f.session.archives.snapshot().status).toBe("ready");
+    expect(f.session.archives.snapshot().archived).toEqual([]);
+  } finally {
+    random.mockRestore();
+    vi.useRealTimers();
+  }
+  await waitFor(() => expect(f.row("retired")).not.toBeNull());
+});
+
+it("retires an outage archive read still pending when the transport reconnects", async () => {
+  const f = transportArchivedDmFixture(true);
+  f.state("connected");
+  render(f.view("active"));
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  await waitFor(() => expect(f.row("retired")).toBeNull());
+  const stale = f.archiveSnapshot();
+  let finish!: (events: (typeof stale)[]) => void;
+  f.read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  f.state("retrying");
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("loading"),
+  );
+  const signal = f.signals.at(-1);
+  f.setArchived(false);
+  f.state("connected");
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  expect(signal?.aborted).toBe(true);
+  await waitFor(() => expect(f.row("retired")).not.toBeNull());
+  await act(async () => finish([stale]));
+  expect(f.session.archives.snapshot().archived).toEqual([]);
+});
+
+it("keeps archive hiding during an unrelated transport roster revocation", async () => {
+  const f = transportArchivedDmFixture(true);
+  f.state("connected");
+  f.roster([f.session.viewer], 1);
+  render(f.view("active"));
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  await waitFor(() => expect(f.row("retired")).toBeNull());
+  let finish!: (events: ReturnType<typeof f.archiveSnapshot>[]) => void;
+  f.read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  f.roster([], 2);
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("loading"),
+  );
+  expect(f.session.archives.snapshot().archived).toEqual([f.retired]);
+  expect(f.row("retired")).toBeNull();
+  await act(async () => finish([f.archiveSnapshot()]));
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  expect(f.row("retired")).toBeNull();
+});
 
 it.each([false, true])(
   "hides only archived one-to-one DMs, including startup (%s)",

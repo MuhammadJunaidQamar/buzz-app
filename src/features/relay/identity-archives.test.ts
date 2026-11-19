@@ -3,6 +3,7 @@ import { schnorr } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "nostr-tools/utils";
 import { afterEach, expect, it, vi } from "vitest";
 import { PublishRejected } from "./outbox";
+import { ReadError } from "./errors";
 import { createRelaySession } from "./session";
 import {
   archiveRelay,
@@ -85,6 +86,33 @@ it("is lazy, exact-author, fresh, bounded and background through the actual sess
   await previous;
   expect(h.archives.state(target.pubkey)).toBe("not-archived");
   expect(h.query).toHaveBeenCalledTimes(3);
+});
+it("session recovery respects archive admission delays and stops after success", async () => {
+  vi.useFakeTimers();
+  const h = harness();
+  h.live.state({ status: "connected", routes: [] });
+  const first = h.archives.ensure();
+  const request = h.wire.next();
+  request.fail(new ReadError("unavailable", "quota", 429, 60_000));
+  await first;
+  expect(h.archives.snapshot()).toMatchObject({
+    status: "error",
+    transient: true,
+    retryAt: Date.now() + 60_000,
+  });
+  await vi.advanceTimersByTimeAsync(59_999);
+  expect(h.query).toHaveBeenCalledTimes(1);
+  // The existing recovery owner retries on its next capped backoff turn.
+  for (let tick = 0; tick < 10 && !h.wire.pending.length; tick++)
+    await vi.advanceTimersToNextTimerAsync();
+  expect(h.wire.pending).toHaveLength(1);
+  expect(Date.now()).toBeGreaterThanOrEqual(h.archives.snapshot().retryAt ?? 0);
+  h.wire.next().respond([snapshot()]);
+  await h.archives.ensure();
+  expect(h.archives.snapshot().status).toBe("ready");
+  const count = h.query.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(h.query).toHaveBeenCalledTimes(count);
 });
 it.each([null, "invalid"])(
   "does not infer archive authority from relayAuthor (%s)",
@@ -237,7 +265,7 @@ it("rejects rollback across refresh, failure and cache clear; permits the same h
   expect(h.archives.snapshot().createdAt).toBe(6);
 });
 it.each(["cache", "disconnect", "access", "dispose"] as const)(
-  "%s invalidation fences late results; only a disconnect keeps known state",
+  "%s invalidation fences late results; channel access and disconnect keep relay-wide visibility",
   async (action) => {
     const h = harness();
     h.live.state({ status: "connected", routes: [] });
@@ -254,7 +282,7 @@ it.each(["cache", "disconnect", "access", "dispose"] as const)(
       h.live.receive([roster(relay, "room", [], 2)]);
     else h.dispose();
     expect(req.signal?.aborted).toBe(true);
-    const kept = action === "disconnect";
+    const kept = action === "disconnect" || action === "access";
     expect(archiveHides(h.archives, target.pubkey, viewer.pubkey)).toBe(kept);
     expect(h.archives.state(target.pubkey)).toBe("unknown");
     req.respond([snapshot(2)]);

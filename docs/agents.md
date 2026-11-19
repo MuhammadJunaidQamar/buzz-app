@@ -1314,8 +1314,13 @@ active list. Invalid `p` keys are ignored and extra `p` elements have no semanti
 A successful snapshot replaces the entire list; newer timestamps / lower-id ties
 win. A session-local ordering fence survives cache clear, without retaining old
 archive contents; it is not persistent rollback protection across sessions/devices.
-Access purge, disconnect, cache clear and disposal clear evidence and cancel work.
-The sidebar demands this read and re-ensures idle evidence after reconnect.
+Channel-access changes and disconnect invalidate freshness and cancel work while
+retaining relay-wide archive visibility. Explicit cache clear and session disposal
+discard it. Connection establishment invalidates freshness again, retiring failed
+or pending outage reads. The sidebar demands the resulting idle evidence.
+Transient failures also join the session's existing capped recovery backoff,
+respecting relay admission delays. Invalid snapshots and access refusals wait
+for an explicit refresh or connection change.
 No periodic poll, event-union seeding or history filtering is added.
 
 This is finite evidence, not a live archive directory.

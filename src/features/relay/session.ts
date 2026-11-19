@@ -541,7 +541,9 @@ export function createRelaySession(
       presence.clear();
       channelActivity.retain(canReadRemote);
       activityRosterKey = undefined;
-      archives.clear();
+      // Archive visibility is relay-wide, independent of channel access.
+      // Retire in-flight work and freshness, retaining only that evidence.
+      archives.stale();
       workflows.clear();
       for (const purge of views.values()) purge();
       // The relay reapplies access to a new sync; nothing held survives.
@@ -2628,6 +2630,19 @@ export function createRelaySession(
     ? createRecovery([
         liveRecovery,
         recoverable(
+          archives.queries.subscribe,
+          () => loadState(archives.queries.snapshot()),
+          () => {
+            const state = archives.queries.snapshot();
+            if (
+              state.status !== "idle" &&
+              state.status !== "unavailable" &&
+              Date.now() >= (state.retryAt ?? 0)
+            )
+              void archives.queries.refresh();
+          },
+        ),
+        recoverable(
           channelKit.capability.subscribe,
           () => loadState(channelKit.capability.snapshot()),
           () => void channelKit.capability.refresh(),
@@ -4095,6 +4110,13 @@ export function createRelaySession(
         typing.clear();
         memories.clear();
       }
+      // An outage read may have exhausted retries or still be pending.
+      // A demanding surface must start again on the recovered connection.
+      if (
+        snapshot.status === "connected" &&
+        liveSnapshot.status !== "connected"
+      )
+        archives.stale();
       if (
         snapshot.status !== "connected" &&
         liveSnapshot.status === "connected"
