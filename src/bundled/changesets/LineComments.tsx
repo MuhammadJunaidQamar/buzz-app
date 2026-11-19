@@ -1,45 +1,75 @@
+import type { SelectedLineRange } from "@pierre/diffs";
 import {
   type FormEvent,
-  type ReactNode,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
-import {
-  type ChangeData,
-  type FileData,
-  type GutterOptions,
-  computeNewLineNumber,
-  computeOldLineNumber,
-  getChangeKey,
-} from "react-diff-view";
-import { ChatCircleIcon } from "../../shared/design-system/icons";
 import { Button } from "../../shared/design-system/ui/Button";
 import { Field } from "../../shared/design-system/ui/Field";
 import { Textarea } from "../../shared/design-system/ui/Textarea";
 import { DiffViewer } from "../diffs/DiffViewer";
+import type { FileData } from "../diffs/parse";
 import type { Comments, LineComment } from "./comments";
 import styles from "./Changesets.module.css";
 
+type Change = FileData["hunks"][number]["changes"][number];
+type Side = LineComment["at"]["side"];
+
+const newLine = (change: Change) =>
+  change.type === "normal"
+    ? change.newLineNumber
+    : change.type === "insert"
+      ? change.lineNumber
+      : -1;
+const oldLine = (change: Change) =>
+  change.type === "normal"
+    ? change.oldLineNumber
+    : change.type === "delete"
+      ? change.lineNumber
+      : -1;
+
 /** Where `changes` sit: in the file as it is now, or, when they were all
  * removed, as it was. */
-export function describeLines(changes: readonly ChangeData[]): string {
-  const now = changes.map(computeNewLineNumber).filter((line) => line > 0);
+export function describeLines(changes: readonly Change[]): string {
+  const now = changes.map(newLine).filter((line) => line > 0);
   const numbers = now.length
     ? now
-    : changes.map(computeOldLineNumber).filter((line) => line > 0);
+    : changes.map(oldLine).filter((line) => line > 0);
   const low = Math.min(...numbers);
   const high = Math.max(...numbers);
   const span = low === high ? `line ${low}` : `lines ${low}-${high}`;
   return now.length ? span : `removed ${span}`;
 }
-const marker = (change: ChangeData) =>
+
+/** The changes a selected range covers, top to bottom. */
+export function changesIn(
+  changes: readonly Change[],
+  range: SelectedLineRange,
+): Change[] {
+  const find = (line: number, side: Side) =>
+    changes.findIndex(
+      (change) => (side === "deletions" ? oldLine : newLine)(change) === line,
+    );
+  const from = find(range.start, range.side ?? "additions");
+  const to = find(range.end, range.endSide ?? range.side ?? "additions");
+  if (from < 0 || to < 0) return [];
+  return changes.slice(Math.min(from, to), Math.max(from, to) + 1);
+}
+
+/** The line a comment on `changes` sits under. */
+const anchorOf = (change: Change): LineComment["at"] =>
+  change.type === "delete"
+    ? { side: "deletions", line: change.lineNumber }
+    : { side: "additions", line: newLine(change) };
+
+const marker = (change: Change) =>
   change.type === "insert" ? "+" : change.type === "delete" ? "-" : " ";
 
-/** One file's diff whose lines take comments: choose a line number, or
- * Shift-choose another to cover the lines between. Each comment goes to the
- * agent as soon as it is made. */
+/** One file's diff whose lines take comments: choose a line number, drag or
+ * Shift-click to cover more, or use the add button beside a line. Each
+ * comment goes to the agent as soon as it is made. */
 export function CommentableDiff({
   content,
   files,
@@ -64,47 +94,26 @@ export function CommentableDiff({
     () => files?.flatMap((file) => file.hunks.flatMap((hunk) => hunk.changes)),
     [files],
   );
-  const [pick, setPick] = useState<{ from: number; to: number }>();
+  const [pick, setPick] = useState<SelectedLineRange | null>(null);
   // What the open field holds, kept here so moving it to a wider range keeps
   // it without each keystroke rendering the diff again.
   const typed = useRef("");
-  // The line number that opened the field, which takes focus back.
-  const opener = useRef<HTMLButtonElement | null>(null);
   const [failure, setFailure] = useState<string>();
-  // The one line number in the Tab order; arrow keys move it.
-  // Kept out of state so moving it doesn't render the whole diff again.
-  const stop = useRef<string>(undefined);
   if (!files || !changes?.length)
     return <DiffViewer content={content} files={files} filePath={path} />;
-  const low = pick && Math.min(pick.from, pick.to);
-  const high = pick && Math.max(pick.from, pick.to);
-  const picked =
-    low === undefined || high === undefined ? [] : changes.slice(low, high + 1);
-  const choose = (
-    change: ChangeData,
-    from: HTMLButtonElement,
-    extend: boolean,
-  ) => {
-    const at = changes.indexOf(change);
-    if (at < 0) return;
-    opener.current = from;
-    setFailure(undefined);
-    setPick(
-      extend && pick ? { from: pick.from, to: at } : { from: at, to: at },
-    );
-  };
+  const picked = pick ? changesIn(changes, pick) : [];
+  const last = picked.at(-1);
   const cancel = () => {
-    setPick(undefined);
+    setPick(null);
     setFailure(undefined);
     typed.current = "";
-    opener.current?.focus();
   };
   const add = () => {
     const text = typed.current;
-    if (!picked.length || !text.trim()) return;
+    if (!last || !text.trim()) return;
     const comment = {
       path,
-      keys: picked.map(getChangeKey),
+      at: anchorOf(last),
       lines: describeLines(picked),
       code: picked.map((change) => `${marker(change)}${change.content}`),
       text: text.trim(),
@@ -120,113 +129,50 @@ export function CommentableDiff({
     comments.add(draft, comment);
     cancel();
   };
-  const widgets: Record<string, ReactNode[]> = {};
-  const place = (key: string, row: ReactNode) => {
-    widgets[key] = [...(widgets[key] ?? []), row];
-  };
-  for (const comment of saved) {
-    const key = comment.path === path ? comment.keys.at(-1) : undefined;
-    if (key) place(key, <SentComment key={comment.id} comment={comment} />);
+  const mine = saved.filter((comment) => comment.path === path);
+  const lineAnnotations = mine.map((comment) => ({
+    side: comment.at.side,
+    lineNumber: comment.at.line,
+    metadata: comment.id,
+  }));
+  if (last) {
+    const at = anchorOf(last);
+    lineAnnotations.push({
+      side: at.side,
+      lineNumber: at.line,
+      metadata: "new",
+    });
   }
-  const anchor = picked.at(-1);
-  if (anchor)
-    place(
-      getChangeKey(anchor),
-      <NewComment
-        key="new"
-        label={`Comment on ${describeLines(picked)}`}
-        typed={typed}
-        failure={failure}
-        cancel={cancel}
-        add={add}
-      />,
-    );
-  const first = changes[0];
-  const tabStop = stop.current ?? (first && getChangeKey(first));
-  const renderGutter = ({ change, side, renderDefault }: GutterOptions) => {
-    // One target per row: removed lines by their old number, the rest by
-    // their number now.
-    const own = change.type === "delete" ? side === "old" : side === "new";
-    const line = own
-      ? side === "old"
-        ? computeOldLineNumber(change)
-        : computeNewLineNumber(change)
-      : -1;
-    if (line < 0) return renderDefault();
-    const key = getChangeKey(change);
-    return (
-      <button
-        type="button"
-        className={styles.line}
-        data-change={key}
-        tabIndex={key === tabStop ? 0 : -1}
-        onFocus={(event) => {
-          if (stop.current === key) return;
-          for (const other of event.currentTarget
-            .closest("table")
-            ?.querySelectorAll<HTMLButtonElement>(
-              'button[data-change][tabindex="0"]',
-            ) ?? [])
-            other.tabIndex = -1;
-          event.currentTarget.tabIndex = 0;
-          stop.current = key;
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && event.shiftKey) {
-            event.preventDefault();
-            choose(change, event.currentTarget, true);
-            return;
-          }
-          const lines = [
-            ...(event.currentTarget
-              .closest("table")
-              ?.querySelectorAll<HTMLButtonElement>("button[data-change]") ??
-              []),
-          ];
-          const at = lines.indexOf(event.currentTarget);
-          const to =
-            event.key === "ArrowDown"
-              ? lines[at + 1]
-              : event.key === "ArrowUp"
-                ? lines[at - 1]
-                : event.key === "Home"
-                  ? lines[0]
-                  : event.key === "End"
-                    ? lines.at(-1)
-                    : undefined;
-          if (!to) return;
-          event.preventDefault();
-          to.focus();
-        }}
-        aria-label={`Comment on ${change.type === "delete" ? "removed " : ""}line ${line}`}
-        title="Comment. Shift-click another line, or use the arrow keys and Shift+Enter, to cover a range."
-        onClick={(event) => choose(change, event.currentTarget, event.shiftKey)}
-      >
-        <ChatCircleIcon
-          className={styles.lineIcon}
-          size="0.875rem"
-          aria-hidden="true"
-        />
-        {renderDefault()}
-      </button>
-    );
-  };
   return (
     <DiffViewer
       content={content}
       files={files}
       filePath={path}
       annotate={{
-        widgets: Object.fromEntries(
-          Object.entries(widgets).map(([key, rows]) => [
-            key,
-            <div key={key} className={styles.thread}>
-              {rows}
-            </div>,
-          ]),
-        ),
-        selectedChanges: picked.map(getChangeKey),
-        renderGutter,
+        lineAnnotations,
+        renderAnnotation: ({ metadata }) => {
+          const comment = mine.find((each) => each.id === metadata);
+          return (
+            <div className={styles.thread}>
+              {comment ? (
+                <SentComment comment={comment} />
+              ) : metadata === "new" && picked.length ? (
+                <NewComment
+                  label={`Comment on ${describeLines(picked)}`}
+                  typed={typed}
+                  failure={failure}
+                  cancel={cancel}
+                  add={add}
+                />
+              ) : null}
+            </div>
+          );
+        },
+        selectedLines: pick,
+        onSelect: (range) => {
+          setFailure(undefined);
+          setPick(range && changesIn(changes, range).length ? range : null);
+        },
       }}
     />
   );

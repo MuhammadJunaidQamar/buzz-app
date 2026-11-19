@@ -77,17 +77,23 @@ for (const { name, width, theme, large } of [
     await expect(panel.getByText("const retries = 3;")).toBeVisible();
     await expect(panel.getByText("const delay = 250;")).toBeVisible();
 
-    // A comment on a line goes straight to the agent and stays on the diff.
-    await panel.getByRole("button", { name: "Comment on line 2" }).click();
+    // Choosing line numbers opens a comment that goes straight to the agent
+    // and stays on the diff.
+    const number = (type, line) =>
+      panel.locator(
+        `[data-gutter] [data-line-type="${type}"][data-column-number="${line}"]`,
+      );
+    await number("change-addition", 2).click();
+    await number("change-addition", 3).click({ modifiers: ["Shift"] });
     await panel
-      .getByRole("textbox", { name: "Comment on line 2" })
+      .getByRole("textbox", { name: "Comment on lines 2-3" })
       .fill("Make this configurable");
     await panel.getByRole("button", { name: "Send" }).click();
     await expect(
-      panel.getByRole("region", { name: "Comment on line 2" }),
+      panel.getByRole("region", { name: "Comment on lines 2-3" }),
     ).toContainText("Make this configurable");
     expect(await page.evaluate(() => window.sent)).toEqual([
-      expect.stringContaining("Make this configurable"),
+      expect.stringContaining("+const delay = 250;"),
     ]);
 
     // Keyboard steps to the next file; a binary file has no text diff.

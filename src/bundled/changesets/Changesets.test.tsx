@@ -7,7 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ComposerAccessoryProps } from "../../features/conversation/contracts";
 import { TurnCards } from "./Card";
 import { createComments } from "./comments";
@@ -16,7 +16,35 @@ import { ChangesetPanel } from "./Panel";
 import { targetFor } from "./target";
 import type { Turn, Turns } from "./turns";
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+async function expectRenderedPatch() {
+  const file = await screen.findByRole("region", {
+    name: "a.txt",
+  });
+  await waitFor(() => {
+    const root = file.querySelector("diffs-container")?.shadowRoot;
+    expect(
+      root?.querySelector('code [data-line][data-line-type="change-deletion"]'),
+    ).toHaveTextContent("one");
+    expect(
+      root?.querySelector('code [data-line][data-line-type="change-addition"]'),
+    ).toHaveTextContent("two");
+  });
+}
 
 const file = (path: string, extra: Partial<ChangedFile> = {}): ChangedFile => ({
   path,
@@ -166,7 +194,7 @@ it("reads a turn's files and shows the chosen file's diff in the panel", async (
     />,
   );
   await waitFor(() => expect(turns.patch).toHaveBeenCalled());
-  expect(await screen.findByText("two")).toBeInTheDocument();
+  await expectRenderedPatch();
   expect(screen.getByText(/2 files changed/)).toBeInTheDocument();
   expect(turns.patch).toHaveBeenCalledWith(
     "t1",
@@ -185,7 +213,7 @@ it("steps to a binary file and says there is no text diff", async () => {
       turns={turns}
     />,
   );
-  await screen.findByText("two");
+  await expectRenderedPatch();
   fireEvent.click(screen.getByRole("button", { name: "Next file" }));
   expect(await screen.findByText(/Binary file/)).toBeInTheDocument();
   expect(turns.patch).toHaveBeenCalledTimes(1);
@@ -225,7 +253,7 @@ it("offers to try again after a failure that may pass", async () => {
   );
   expect(await screen.findByText("git took too long.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-  expect(await screen.findByText("two")).toBeInTheDocument();
+  await expectRenderedPatch();
 });
 
 it("does not offer to try again on a binary file or a snapshot git cleaned up", async () => {

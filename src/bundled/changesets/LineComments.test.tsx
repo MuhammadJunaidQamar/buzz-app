@@ -1,13 +1,45 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import type { SelectedLineRange } from "@pierre/diffs";
+import type { DiffAnnotations } from "../diffs/DiffViewer";
+import { parsePatch } from "../diffs/parse";
 import { createComments, formatComment } from "./comments";
+import { changesIn } from "./LineComments";
 import { ChangesetPanel } from "./Panel";
 import { targetFor } from "./target";
 import type { Turn, Turns } from "./turns";
 
 afterEach(cleanup);
+
+// The real viewer draws lines in a shadow root and selects them with pointer
+// gestures; the browser journey covers that. Here a stand-in shows the
+// annotations and hands out the selection callback.
+let select: (range: SelectedLineRange | null) => void = () => {};
+vi.mock("../diffs/DiffViewer", () => ({
+  DiffViewer: ({ annotate }: { annotate?: DiffAnnotations }) => {
+    if (!annotate) return null;
+    select = annotate.onSelect;
+    return (
+      <div>
+        {annotate.lineAnnotations.map((annotation) => (
+          <div
+            key={`${annotation.side}:${annotation.lineNumber}:${annotation.metadata}`}
+          >
+            {annotate.renderAnnotation(annotation)}
+          </div>
+        ))}
+      </div>
+    );
+  },
+}));
 
 const PATCH = [
   "diff --git a/a.txt b/a.txt",
@@ -69,12 +101,12 @@ function panel(send: (turn: Turn, text: string) => void = vi.fn()) {
   return comments;
 }
 
-async function comment(from: string, to: string | undefined, text: string) {
-  fireEvent.click(await screen.findByRole("button", { name: from }));
-  if (to)
-    fireEvent.click(screen.getByRole("button", { name: to }), {
-      shiftKey: true,
-    });
+const ADDED = "additions" as const;
+const REMOVED = "deletions" as const;
+
+async function comment(range: SelectedLineRange, text: string) {
+  await screen.findByText("1 file changed", { exact: false });
+  act(() => select(range));
   fireEvent.change(screen.getByRole("textbox"), { target: { value: text } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
 }
@@ -82,7 +114,7 @@ async function comment(from: string, to: string | undefined, text: string) {
 it("sends each comment on a range of lines to the turn's agent at once", async () => {
   const send = vi.fn();
   const comments = panel(send);
-  await comment("Comment on line 1", "Comment on line 2", "Rename this");
+  await comment({ start: 1, side: ADDED, end: 2 }, "Rename this");
   expect(send).toHaveBeenLastCalledWith(
     turn,
     "Comment on `a.txt` lines 1-2, in `app`:\n```diff\n keep\n-old\n+new\n```\nRename this",
@@ -91,12 +123,15 @@ it("sends each comment on a range of lines to the turn's agent at once", async (
     screen.getByRole("region", { name: "Comment on lines 1-2" }),
   ).toHaveTextContent("Rename this");
   expect(screen.queryByRole("textbox")).toBeNull();
-  await comment("Comment on removed line 2", undefined, "Keep `old`");
+  await comment({ start: 2, side: REMOVED, end: 2 }, "Keep `old`");
   expect(send).toHaveBeenLastCalledWith(
     turn,
     "Comment on `a.txt` removed line 2, in `app`:\n```diff\n-old\n```\nKeep `old`",
   );
-  expect(comments.list("t1:0")).toHaveLength(2);
+  expect(comments.list("t1:0")).toEqual([
+    expect.objectContaining({ at: { side: ADDED, line: 2 } }),
+    expect.objectContaining({ at: { side: REMOVED, line: 2 } }),
+  ]);
 });
 
 it("keeps the comment open and says why when it can't be sent", async () => {
@@ -105,7 +140,7 @@ it("keeps the comment open and says why when it can't be sent", async () => {
       "Switch to the community and account this changeset was recorded in, then try again.",
     );
   });
-  await comment("Comment on line 2", undefined, "Why?");
+  await comment({ start: 3, side: ADDED, end: 3 }, "Why?");
   expect(screen.getByRole("textbox")).toHaveValue("Why?");
   expect(screen.getByText(/Switch to the community/)).toBeInTheDocument();
   expect(comments.list("t1:0")).toHaveLength(0);
@@ -114,16 +149,32 @@ it("keeps the comment open and says why when it can't be sent", async () => {
 it("cancels a comment with Escape and sends nothing", async () => {
   const send = vi.fn();
   panel(send);
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Comment on line 3" }),
-  );
+  await screen.findByText("1 file changed", { exact: false });
+  act(() => select({ start: 3, side: ADDED, end: 3 }));
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
-  expect(
-    screen.getByRole("button", { name: "Comment on line 3" }),
-  ).toHaveFocus();
   expect(screen.queryByRole("textbox")).toBeNull();
   expect(send).not.toHaveBeenCalled();
+});
+
+it("finds the changes a selection covers across both sides", () => {
+  const changes = (parsePatch(PATCH)?.[0]?.hunks ?? []).flatMap(
+    (hunk) => hunk.changes,
+  );
+  const covered = (range: SelectedLineRange) =>
+    changesIn(changes, range).map((change) => change.content);
+  expect(covered({ start: 2, side: REMOVED, end: 3, endSide: ADDED })).toEqual([
+    "old",
+    "new",
+    "tail",
+  ]);
+  expect(covered({ start: 3, side: ADDED, end: 1 })).toEqual([
+    "keep",
+    "old",
+    "new",
+    "tail",
+  ]);
+  expect(covered({ start: 9, side: ADDED, end: 9 })).toEqual([]);
 });
 
 it("fences quoted code past its own backticks and shortens long quotes", () => {
@@ -131,7 +182,7 @@ it("fences quoted code past its own backticks and shortens long quotes", () => {
   expect(
     formatComment("/w", {
       path: "a.md",
-      keys: [],
+      at: { side: ADDED, line: 9 },
       lines: "lines 1-9",
       code,
       text: " Hi ",
@@ -153,46 +204,11 @@ it("fences quoted code past its own backticks and shortens long quotes", () => {
   );
 });
 
-it("puts one line number in the Tab order and moves it with the arrow keys", async () => {
-  panel();
-  const first = await screen.findByRole("button", {
-    name: "Comment on line 1",
-  });
-  const removed = screen.getByRole("button", {
-    name: "Comment on removed line 2",
-  });
-  expect(first).toHaveAttribute("tabindex", "0");
-  expect(removed).toHaveAttribute("tabindex", "-1");
-  first.focus();
-  fireEvent.keyDown(first, { key: "ArrowDown" });
-  expect(removed).toHaveFocus();
-  expect(removed).toHaveAttribute("tabindex", "0");
-  expect(first).toHaveAttribute("tabindex", "-1");
-  fireEvent.keyDown(removed, { key: "End" });
-  expect(
-    screen.getByRole("button", { name: "Comment on line 3" }),
-  ).toHaveFocus();
-});
-
-it("extends a comment's range with Shift+Enter", async () => {
-  panel();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Comment on line 1" }),
-  );
-  fireEvent.keyDown(screen.getByRole("button", { name: "Comment on line 2" }), {
-    key: "Enter",
-    shiftKey: true,
-  });
-  expect(
-    screen.getByRole("textbox", { name: "Comment on lines 1-2" }),
-  ).toBeInTheDocument();
-});
-
 it("keeps quoted lines short and code spans whole", () => {
   expect(
     formatComment("my`app", {
       path: "a`b.ts",
-      keys: [],
+      at: { side: ADDED, line: 1 },
       lines: "line 1",
       code: [`+${"x".repeat(400)}`],
       text: "Hi",

@@ -2,8 +2,8 @@
 export type LineComment = {
   id: string;
   path: string;
-  /** The changes it covers, by react-diff-view change key. */
-  keys: string[];
+  /** The line it sits under: its number on the side of the diff it is on. */
+  at: { side: "additions" | "deletions"; line: number };
   /** Where it points, such as "lines 12-14" or "removed line 3". */
   lines: string;
   /** The covered diff lines, with their +, - or space marker. */
