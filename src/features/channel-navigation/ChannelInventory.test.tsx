@@ -425,7 +425,7 @@ it("demands one archive read per reconnect and none while disconnected", async (
   );
   expect(f.read).toHaveBeenCalledTimes(1);
   f.state("retrying");
-  expect(f.session.archives.snapshot().status).toBe("paused");
+  expect(f.session.archives.snapshot().status).toBe("idle");
   await act(() => f.session.archives.ensure());
   expect(f.read).toHaveBeenCalledTimes(1);
   f.state("connected");
@@ -454,7 +454,7 @@ it.each([false, true])(
       f.read.mockRejectedValue(new ReadError("unavailable", "offline", 503));
       f.state("retrying");
       await act(() => vi.advanceTimersByTimeAsync(3_500));
-      expect(f.session.archives.snapshot().status).toBe("paused");
+      expect(f.session.archives.snapshot().status).toBe("idle");
       expect(f.read).toHaveBeenCalledTimes(before);
       f.state("connected");
       await act(() => vi.advanceTimersByTimeAsync(3_500));
@@ -560,7 +560,7 @@ it("retires an outage archive read still pending when the transport reconnects",
   const signal = f.signals.at(-1);
   f.state("retrying");
   expect(signal?.aborted).toBe(true);
-  expect(f.session.archives.snapshot().status).toBe("paused");
+  expect(f.session.archives.snapshot().status).toBe("idle");
   f.setArchived(false);
   f.state("connected");
   await waitFor(() =>

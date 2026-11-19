@@ -288,12 +288,7 @@ it.each(["cache", "disconnect", "access", "dispose"] as const)(
     req.respond([snapshot(2)]);
     await pending;
     expect(h.archives.snapshot()).toMatchObject({
-      status:
-        action === "dispose"
-          ? "unavailable"
-          : action === "disconnect"
-            ? "paused"
-            : "idle",
+      status: action === "dispose" ? "unavailable" : "idle",
       archived: kept ? [target.pubkey] : [],
     });
     expect(h.archives.snapshot().readAt).toBe(kept ? readAt : undefined);

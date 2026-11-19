@@ -13,7 +13,7 @@ import type { RelayReader } from "./reader";
 import type { RelayWriter } from "./transport";
 
 export type IdentityArchiveSnapshot = Readonly<{
-  status: "unavailable" | "idle" | "paused" | "loading" | "ready" | "error";
+  status: "unavailable" | "idle" | "loading" | "ready" | "error";
   archived: readonly string[];
   eventId?: string;
   createdAt?: number;
@@ -79,6 +79,9 @@ export function createIdentityArchives(
   const requests = new Set<AbortController>();
   const listeners = new Set<() => void>();
   let closed = false;
+  // Keep connection scheduling private: consumers still see idle as pending.
+  let paused = false;
+  let demanded = false;
   let controller: AbortController | undefined;
   let pending: Promise<void> | undefined;
   // Keep only the ordering fence across cache clears; never revive old contents.
@@ -333,14 +336,16 @@ export function createIdentityArchives(
     publish({ status: stop(), archived: empty });
   }
   /** Invalidates freshness and in-flight work; relay-wide visibility stays
-   * known until the next ensure() replaces it. Paused demand waits for the
-   * connection owner to resume idle. Never access evidence. */
-  function stale(
-    next: "idle" | "paused" = snapshot.status === "paused" ? "paused" : "idle",
-  ) {
+   * known until the next ensure() replaces it. A paused ensure records demand
+   * for the connection owner to resume once. Never access evidence. */
+  function stale(next: "idle" | "paused" = paused ? "paused" : "idle") {
+    paused = next === "paused";
     const { error: _, transient: __, retryAt: ___, ...known } = snapshot;
-    const status = stop();
-    publish({ ...known, status: status === "idle" ? next : status });
+    publish({ ...known, status: stop() });
+    if (!paused && demanded) {
+      demanded = false;
+      void refresh();
+    }
   }
   return {
     queries: Object.freeze({
@@ -353,8 +358,12 @@ export function createIdentityArchives(
         };
       },
       state,
-      ensure: () =>
-        snapshot.status === "idle" ? refresh() : (pending ?? Promise.resolve()),
+      ensure: () => {
+        if (snapshot.status !== "idle") return pending ?? Promise.resolve();
+        if (!paused) return refresh();
+        demanded = true;
+        return Promise.resolve();
+      },
       refresh,
       /** Whether this community advertises an archive authority; fixed per session. */
       supported: available,
