@@ -23,16 +23,19 @@ it("cancels Mart's pending theme update when the picker closes", async () => {
       },
     );
   // Frequent names the custom emoji that dispose() deletes from Mart's Data.
-  const id = "buzz-custom/fixture/stamp";
-  FrequentlyUsed.add({ id });
-  // Clears only the persisted Frequent state, so a later file or a reload
-  // starts clean. emoji-mart's module-level FrequentlyUsed index keeps its
-  // in-memory copy, so later tests in this file still see the fixture emoji
-  // in Frequent.
-  onTestFinished(() => {
-    localStorage.removeItem("emoji-mart.frequently");
-    localStorage.removeItem("emoji-mart.last");
-  });
+  // Only this mount's read is answered, so Mart's module-level Frequent index
+  // and its persisted copy stay as the other tests expect them. Mart's types
+  // misname `get` as `_get1`.
+  const frequent = vi
+    .spyOn(FrequentlyUsed as unknown as { get(): string[] }, "get")
+    .mockReturnValueOnce(["buzz-custom/fixture/stamp"]);
+  onTestFinished(() => frequent.mockRestore());
+  // Mart's deferred render runs in a Preact microtask, so a crash there never
+  // reaches this test's stack: it surfaces as an unhandled rejection.
+  const rejections: unknown[] = [];
+  const rejected = (reason: unknown) => rejections.push(reason);
+  process.on("unhandledRejection", rejected);
+  onTestFinished(() => void process.off("unhandledRejection", rejected));
   const host = document.body.appendChild(document.createElement("div"));
   const dispose = mountEmojiMart({
     host,
@@ -73,7 +76,12 @@ it("cancels Mart's pending theme update when the picker closes", async () => {
   expect(picker.component).toHaveProperty("nextStateTimer");
   dispose();
   expect(vi.getTimerCount()).toBe(0);
-  expect(() => vi.runAllTimers()).not.toThrow();
+  // Were a timer still pending, flush it and let its render settle: Node
+  // reports the rejection before the next real task.
+  vi.runAllTimers();
+  vi.useRealTimers();
+  await new Promise((resolve) => setTimeout(resolve));
+  expect(rejections).toEqual([]);
 });
 
 it("adds fuzzy shortcode matches after Mart's own results", async () => {
