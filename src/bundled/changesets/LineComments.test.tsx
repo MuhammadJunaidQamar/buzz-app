@@ -28,7 +28,7 @@ vi.mock("../diffs/DiffViewer", () => ({
     if (!annotate) return null;
     select = annotate.onSelect;
     return (
-      <div>
+      <div data-testid="diff">
         {annotate.lineAnnotations.map((annotation) => (
           <div
             key={`${annotation.side}:${annotation.lineNumber}:${annotation.metadata}`}
@@ -105,7 +105,8 @@ const ADDED = "additions" as const;
 const REMOVED = "deletions" as const;
 
 async function comment(range: SelectedLineRange, text: string) {
-  await screen.findByText("1 file changed", { exact: false });
+  // The file list arrives before its patch; wait for the diff itself.
+  await screen.findByTestId("diff");
   act(() => select(range));
   fireEvent.change(screen.getByRole("textbox"), { target: { value: text } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -149,7 +150,8 @@ it("keeps the comment open and says why when it can't be sent", async () => {
 it("cancels a comment with Escape and sends nothing", async () => {
   const send = vi.fn();
   panel(send);
-  await screen.findByText("1 file changed", { exact: false });
+  // The file list arrives before its patch; wait for the diff itself.
+  await screen.findByTestId("diff");
   act(() => select({ start: 3, side: ADDED, end: 3 }));
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
