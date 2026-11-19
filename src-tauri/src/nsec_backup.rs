@@ -1335,10 +1335,7 @@ impl Api {
                 .map_err(|_| RETRY)?,
             None => request.header(&self.header, &self.credential),
         };
-        let response = request
-            .send()
-            .await
-            .map_err(|_| ReadError::Unreachable)?;
+        let response = request.send().await.map_err(|_| ReadError::Unreachable)?;
         match response.status() {
             reqwest::StatusCode::UNAUTHORIZED => {
                 if self.authorization.is_some() {
