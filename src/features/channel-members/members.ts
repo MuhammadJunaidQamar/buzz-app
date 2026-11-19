@@ -51,7 +51,8 @@ export function canAddToDirectMessage(
     !channel.archived &&
     !channel.cached &&
     viewerMember(channel, session.viewer) &&
-    !(session.relayAuthor && channel.members?.includes(session.relayAuthor))
+    (!session.relayAuthor ||
+      (channel.members && !channel.members.includes(session.relayAuthor)))
   );
 }
 

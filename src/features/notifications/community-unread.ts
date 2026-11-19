@@ -129,7 +129,7 @@ function repairOnRoster(
       status === "ready" ||
       status === "error" ||
       channels.some(
-        (channel) => !channel.cached && channel.members?.includes(viewer),
+        (channel) => !channel.cached && viewerMember(channel, viewer),
       )
     );
   };

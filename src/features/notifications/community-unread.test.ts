@@ -54,7 +54,7 @@ function fakeSession() {
   };
   let channels: {
     id: string;
-    members: string[];
+    members?: string[];
     viewerMembership?: { pubkey: string; joined: boolean };
     huddle?: true;
     cached?: true;
@@ -301,7 +301,16 @@ it("keys every joined community's unread, opening its session and repair once", 
   expect(first.ensure).not.toHaveBeenCalled();
   first.loadUnreadable({ id: "a", members: ["someone-else"] });
   expect(first.ensure).not.toHaveBeenCalled();
-  first.load("a");
+  first.membership({
+    id: "a",
+    members: [viewer],
+    viewerMembership: { pubkey: viewer, joined: false },
+  });
+  expect(first.ensure).not.toHaveBeenCalled();
+  first.membership({
+    id: "a",
+    viewerMembership: { pubkey: viewer, joined: true },
+  });
   expect(first.ensure).toHaveBeenCalledTimes(1);
   expect(opened).not.toHaveBeenCalledWith(two, true);
   await vi.waitFor(() => expect(opened).toHaveBeenCalledWith(two, true));

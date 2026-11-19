@@ -81,14 +81,15 @@ export function AgentConnectionSetup({
 }) {
   const agents = useContext(AgentsContext);
   // Follow roster changes that land without a parent render.
-  const roster =
-    useListedChannel(
-      session.channels,
-      channel?.id,
-      (listed) => listed?.members,
-    ) ?? channel?.members;
+  const current = (listed: ChannelSummary | undefined) =>
+    listed ?? (channel && session.channels.get?.(channel.id));
+  const roster = useListedChannel(
+    session.channels,
+    channel?.id,
+    (listed) => current(listed)?.members,
+  );
   const joined = useListedChannel(session.channels, channel?.id, (listed) =>
-    viewerMember(listed ?? channel, session.viewer),
+    viewerMember(current(listed), session.viewer),
   );
   const profiles = useSyncExternalStore(
     session.profiles.subscribe,
@@ -123,14 +124,18 @@ export function AgentConnectionSetup({
   const isAgent = (key: string) => profiles.get(key)?.isAgent === true;
   // Only a DM has a peer; a channel can have thousands of members.
   const members =
-    channel?.channelType === "dm" ? [...new Set(channel.members ?? [])] : [];
+    channel?.channelType === "dm"
+      ? [...new Set(roster ?? [])].filter((key) => key !== session.viewer)
+      : [];
   const peer =
     channel?.channelType === "dm" &&
     !channel.archived &&
+    !channel.readOnly &&
+    !channel.cached &&
     channel.viewerRole !== "guest" &&
-    members.length === 2 &&
-    members.includes(session.viewer ?? "")
-      ? members.find((key) => key !== session.viewer)
+    joined &&
+    members.length === 1
+      ? members[0]
       : undefined;
   if (
     agents &&

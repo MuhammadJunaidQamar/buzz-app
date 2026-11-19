@@ -2774,9 +2774,7 @@ function ChannelWorkspace({
                               channel.cached ||
                               (channel.readOnly &&
                                 channel.viewerRole !== "guest") ||
-                              !channel.members?.includes(
-                                queries.viewer ?? "",
-                              ) ||
+                              !viewerMember(channel, queries.viewer) ||
                               !panels.snapshot().includes(panel) ||
                               !panel.channelMenu?.eligible(channel, queries)
                             )

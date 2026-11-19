@@ -1706,9 +1706,22 @@ it("keeps invitation and Solo sharing viewer gates independent of unloaded peers
 it.each([
   ["legacy roster", { members: ["viewer", "peer"] }, true],
   [
-    "joined without peers",
+    "joined without a roster cannot exclude the moderation DM",
     { viewerMembership: { pubkey: "viewer", joined: true } },
+    false,
+  ],
+  [
+    "joined with peer evidence but no viewer roster entry",
+    { members: ["peer"], viewerMembership: { pubkey: "viewer", joined: true } },
     true,
+  ],
+  [
+    "moderation DM",
+    {
+      members: ["viewer", "relay"],
+      viewerMembership: { pubkey: "viewer", joined: true },
+    },
+    false,
   ],
   [
     "denied with retained peers",
