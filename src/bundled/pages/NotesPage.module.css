@@ -65,6 +65,8 @@
 .titleField::after {
   grid-area: 1 / 1;
   overflow-wrap: anywhere;
+  /* Match line breaks and allow for native textarea scroll rounding. */
+  padding-inline-end: var(--space-half);
 }
 /* The mirror sizes the field on WebKit versions without field-sizing. */
 .titleField::after {
@@ -73,6 +75,7 @@
   visibility: hidden;
   white-space: pre-wrap;
   border: 1px solid transparent;
+  padding-block-end: var(--space-half);
 }
 .titleField > textarea {
   height: 100%;
