@@ -1837,8 +1837,10 @@ tab, asks **Discard changes?** first; **Keep editing** keeps them.
   answer there. Builderlab is offered where the community has a Builderlab
   sign-in server. You sign in to that server under **Settings → Identity →
   Community sign-ins**; communities on the same server share that sign-in, so
-  their availability matches. TypeSafe's API key is one
-  key that every community using TypeSafe shares. Until you choose, a
+  their availability matches. Each community using TypeSafe has its own
+  TypeSafe API key, set in that community's row. A key saved before keys were
+  per community is given to every community you had joined then. Until you
+  choose, a
   community uses Builderlab where it is offered and TypeSafe elsewhere. When
   the provider a community uses cannot answer (for example Builderlab is not
   signed in there, or the account cannot use decisions), decisions there fail
@@ -1847,11 +1849,13 @@ tab, asks **Discard changes?** first; **Keep editing** keeps them.
   administrator.
   Choose **Off** for a community to turn decisions off there, for example
   where they are billed and you don't want to use them: no provider is asked.
-- In **Settings → Decisions API**, TypeSafe’s saved API key stays masked. Its
+- In **Settings → Decisions API**, a community’s saved TypeSafe API key stays
+  masked. Its
   chevron menu offers **Replace / Remove**. Replacement starts blank and masked,
   with inline **Cancel / Save** controls. **Save** stays disabled until you enter
-  a key; removal asks for confirmation before
-  deleting the key from this device’s secure storage. Settings cannot reveal or
+  a key; removal asks for confirmation before deleting that community’s key
+  from this device’s secure storage. Other communities keep theirs. Settings
+  cannot reveal or
   copy the saved key.
 - Some plugins let the person's other agents on this computer, such as Claude
   Code, Codex or Pi, use their tools while Buzz is open. Those agents run the

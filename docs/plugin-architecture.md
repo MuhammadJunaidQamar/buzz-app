@@ -3679,7 +3679,7 @@ scope. It does not register a provider or let a plugin select another provider.
 
 | Provider | Plugin | Credentials |
 |----------|--------|-------------|
-| `buzz.typesafe/typesafe` | TypeSafe (bundled, on by default) | The user's TypeSafe key, kept and read only by native code (`src-tauri/src/decisions.rs`) |
+| `buzz.typesafe/typesafe` | TypeSafe (bundled, on by default) | The TypeSafe key the user saved for the request's community, kept and read only by native code (`src-tauri/src/jev.rs`); a request without a community has no key |
 | `block.builderlab/builderlab` | Builderlab (bundled, in desktop builds with a Builderlab); registered while the build's sign-in is signed in or being restored, or while a joined community has a sign-in server that covers it, signed in or not, so it can be chosen before sign-in; offered only in communities such a server covers, and there `needs-setup` until that server is signed in and allows the account decisions | The Builderlab sign-in of the request's community, which native code sends with each call. Builderlab answers with Jev and bills that `community`; its server allows up to 32 questions per call |
 
 ## In-app keyboard shortcuts
