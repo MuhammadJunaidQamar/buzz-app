@@ -839,6 +839,27 @@ async fn corrupt_storage_is_unavailable_and_public_snapshots_have_no_secret() {
 }
 
 #[tokio::test]
+async fn sign_out_clears_a_record_from_a_newer_build() {
+    let store = Arc::new(Memory::default());
+    let newer = serde_json::json!({
+        "version": 3,
+        "fingerprint": "from-a-newer-build",
+        "revision": uuid::Uuid::new_v4().to_string(),
+        "session_token": "fixture-session-token",
+        "expires_at": "2099-01-01T00:00:00Z",
+        "email": null,
+        "field_from_the_future": true,
+    });
+    *store.raw.lock().unwrap() = Some(Zeroizing::new(serde_json::to_vec(&newer).unwrap()));
+    let host = host(store.clone());
+    let restored = host.restore().await;
+    assert!(restored.status == Status::Unavailable);
+    assert_eq!(restored.failure, Some("storage-corrupt"));
+    assert!(host.sign_out(None).await.status == Status::SignedOut);
+    assert!(store.raw.lock().unwrap().is_none());
+}
+
+#[tokio::test]
 async fn a_restore_that_fails_upstream_keeps_the_record_and_is_not_an_unfinished_sign_out() {
     let store = Arc::new(Memory::default());
     let session = record();

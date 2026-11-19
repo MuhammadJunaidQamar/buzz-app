@@ -1773,9 +1773,15 @@ impl FederatedIdentity {
             self.storage(|store| {
                 let raw = store.read()?;
                 if let Some(raw) = &raw {
-                    let record: Record =
-                        serde_json::from_slice(raw).map_err(|_| "storage-corrupt")?;
-                    store.remove(raw, &record.revision)?;
+                    // Reads only the revision, so sign-out also clears a record
+                    // from a newer build (another version or more fields), which
+                    // restore refuses as corrupt.
+                    #[derive(Deserialize)]
+                    struct Slot {
+                        revision: String,
+                    }
+                    let slot: Slot = serde_json::from_slice(raw).map_err(|_| "storage-corrupt")?;
+                    store.remove(raw, &slot.revision)?;
                 }
                 Ok(raw)
             })
