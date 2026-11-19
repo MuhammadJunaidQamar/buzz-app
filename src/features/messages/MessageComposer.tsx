@@ -20,6 +20,7 @@ import { restoreChatLinks } from "./composer-chat-cards";
 import {
   fetchPastedImages,
   pastedFiles,
+  pastedHtml,
   pastedInlineImages,
 } from "./composer-clipboard";
 import { chatLinkIds } from "./chat-cards";
@@ -3899,7 +3900,7 @@ function Composer({
               extensions={extensions}
               emoji={emojiCatalog.entries}
               onSemanticPaste={(data) => {
-                const reference = pastedForward(data);
+                const reference = pastedForward(pastedHtml(data));
                 if (reference) {
                   if (editing.target || submission) {
                     setError(
