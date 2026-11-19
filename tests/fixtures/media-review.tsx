@@ -7,6 +7,7 @@ import emojiManifest from "../../src/bundled/emoji/manifest.json";
 import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useKeyboardFocusVisibility } from "../../src/shared/design-system/useKeyboardFocusVisibility";
+import { ActivityIndicatorPresentation } from "../../src/features/conversation/typing-presentation";
 import type { Attachment } from "../../src/features/relay/contracts";
 import { AttachmentImage } from "../../src/features/messages/AttachmentImage";
 import { MediaAttachment } from "../../src/features/messages/MediaAttachment";
@@ -84,8 +85,10 @@ const compactTimestamps = new URLSearchParams(location.search).has(
   "timestamps",
 );
 // A working agent in the review thread: its conversation indicator, or with
-// `agent-update` its recorded step after the viewer's own comment.
+// `agent-update` its recorded step after the viewer's own comment. With
+// `agent-update=own` the step follows a comment the agent wrote itself.
 const agentWorking = new URLSearchParams(location.search).has("agent-working");
+const agentUpdate = new URLSearchParams(location.search).get("agent-update");
 const events = [
   rootMessage,
   message(
@@ -106,7 +109,14 @@ const events = [
     3,
     [["e", rootMessage.id, "", "reply"]],
   ),
-  ...(new URLSearchParams(location.search).has("agent-update")
+  ...(agentUpdate === "own"
+    ? [
+        message(designer, "video-preview", "I'll recheck the second cut.", 4, [
+          ["e", rootMessage.id, "", "reply"],
+        ]),
+      ]
+    : []),
+  ...(agentUpdate !== null
     ? [
         message(designer, "video-preview", "Rechecking the second cut", 5, [
           ["e", rootMessage.id, "", "reply"],
@@ -345,20 +355,24 @@ function Fixture() {
         </div>
       )}
       {review !== undefined && (
-        <MediaReviewViewer
-          attachment={review.attachment}
-          session={session}
-          extensions={extensions}
-          scope="video-preview"
-          channelId="video-preview"
-          channelName="Video preview"
-          messageId={review.messageId ?? rootMessage.id}
-          initialTime={review.time}
-          hasComments={!emptyThread}
-          restoreFocus={trigger}
-          onOpenLink={() => false}
-          close={() => setReview(undefined)}
-        />
+        // As the app's conversation does: a recorded working step replaces the
+        // conversation indicator instead of repeating it.
+        <ActivityIndicatorPresentation>
+          <MediaReviewViewer
+            attachment={review.attachment}
+            session={session}
+            extensions={extensions}
+            scope="video-preview"
+            channelId="video-preview"
+            channelName="Video preview"
+            messageId={review.messageId ?? rootMessage.id}
+            initialTime={review.time}
+            hasComments={!emptyThread}
+            restoreFocus={trigger}
+            onOpenLink={() => false}
+            close={() => setReview(undefined)}
+          />
+        </ActivityIndicatorPresentation>
       )}
     </main>
   );

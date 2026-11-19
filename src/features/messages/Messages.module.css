@@ -2631,11 +2631,9 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
   border-radius: inherit;
   clip-path: var(--media-corner-clip, none);
 }
-/* A history line's inline avatar keeps its own size inside the line. */
+/* Only the gutter avatar: an avatar inside a comment keeps its own size. */
 .mediaReviewViewer .mediaReviewComment .message > :first-child,
-.mediaReviewViewer
-  .mediaReviewComment
-  [data-avatar-shape]:not(.audienceAvatar *) {
+.mediaReviewViewer .mediaReviewComment .messageAvatar [data-avatar-shape] {
   width: 1.5rem;
   height: 1.5rem;
   min-width: 1.5rem;
@@ -3957,8 +3955,12 @@ html[data-keyboard-navigation] .activityExpansion {
   height: var(--size-control-sm);
 }
 /* Media comments use 24px avatars. Size the slot, not only the image, so
-   comment and working-agent avatars share one column in every engine. */
-.mediaReviewViewer .mediaReviewThread :is(.nestedAvatar, .agentAvatarGroup) {
+   comment and working-agent avatars share one column in every engine.
+   `.messageAvatar` keeps this above the slot sizes set by layout and density. */
+.mediaReviewViewer
+  .mediaReviewThread
+  .messageAvatar
+  :is(.nestedAvatar, .agentAvatarGroup) {
   flex-basis: 1.5rem;
   width: 1.5rem;
   height: 1.5rem;

@@ -311,10 +311,12 @@ for (const [working, query, row] of [
       .getByRole("complementary", { name: "Media comments" });
     // The agent's comment is first; the viewer's own comment is the last.
     const comment = drawer.locator("[data-review-comment]").first();
-    const indicator = drawer
-      .locator(`${row}[data-agent-response-preview]`)
-      .first();
+    const indicator = drawer.locator(`${row}[data-agent-response-preview]`);
     await expect(indicator).toBeVisible();
+    // A recorded step replaces the conversation indicator: one pill, not two.
+    await expect(drawer.locator("[data-agent-response-preview]")).toHaveCount(
+      1,
+    );
     for (const density of ["default", "compact"]) {
       await page.evaluate((density) => {
         document.documentElement.dataset.messageDensity = density;
@@ -326,7 +328,7 @@ for (const [working, query, row] of [
               [
                 comment.locator("[data-avatar-shape]").first(),
                 comment.locator('[class*="messageBubble"]').first(),
-                indicator.locator("[data-avatar-shape]"),
+                indicator.locator("[data-avatar-shape]").first(),
                 indicator.locator('[class*="messageBubble"]').first(),
               ].map((part) => part.boundingBox()),
             );
@@ -367,6 +369,57 @@ for (const [working, query, row] of [
         });
     }
   });
+
+test("media comments stack a working agent's recorded step under its own comment", async ({
+  page,
+}) => {
+  await page.goto(
+    "/tests/fixtures/media-review.html?photo&agent-working&agent-update=own",
+  );
+  const drawer = page
+    .getByRole("dialog", { name: "Image viewer", exact: true })
+    .getByRole("complementary", { name: "Media comments" });
+  const rows = drawer.locator("[data-review-comment]");
+  await expect(rows).toHaveCount(4);
+  // The agent's comment, then its working step: one group, named once.
+  const own = rows.nth(2);
+  const step = rows.nth(3);
+  const pill = step.locator("[data-agent-response-preview]");
+  await expect(pill).toBeVisible();
+  await expect(drawer.locator("[data-agent-response-preview]")).toHaveCount(1);
+  await expect(own.locator('[class*="byline"]')).toHaveText(/Alex/);
+  await expect(step.locator('[class*="byline"]')).toHaveCount(0);
+  for (const density of ["default", "compact"]) {
+    await page.evaluate((density) => {
+      document.documentElement.dataset.messageDensity = density;
+    }, density);
+    // Bubbles end the group with its avatar; a flat list starts with it.
+    const [bare, held] = density === "compact" ? [step, own] : [own, step];
+    await expect(bare.locator('[class*="messageAvatar"]'), density).toHaveCount(
+      0,
+    );
+    await expect
+      .poll(
+        async () => {
+          const [column, avatar, bubble, stepPill] = await Promise.all(
+            [
+              rows.first().locator("[data-avatar-shape]").first(),
+              held.locator('[class*="messageAvatar"] [data-avatar-shape]'),
+              own.locator('[class*="messageBubble"]').first(),
+              pill.locator('[class*="messageBubble"]').first(),
+            ].map((part) => part.boundingBox()),
+          );
+          return {
+            size: [avatar.width, avatar.height],
+            column: avatar.x - column.x,
+            pillEdge: stepPill.x - bubble.x,
+          };
+        },
+        { message: density },
+      )
+      .toEqual({ size: [24, 24], column: 0, pillEdge: 0 });
+  }
+});
 
 // Inline previews have a much shorter media area than the expanded player.
 test("narrow video thumbnails keep play clear of the progress controls", async ({

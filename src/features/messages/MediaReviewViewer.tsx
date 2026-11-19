@@ -705,6 +705,7 @@ function ReviewComments({
       >
         {replies.map((row, index) => {
           const recorded = activity.byRow.get(row.id);
+          const next = activity.byRow.get(replies[index + 1]?.id ?? "");
           return (
             <div
               key={row.id}
@@ -719,8 +720,10 @@ function ReviewComments({
                   recorded,
                   // A working step is this thread's indicator, laid out like
                   // one. Finished steps stay quiet history lines.
-                  recorded?.active ? "standalone" : "history",
+                  recorded?.active ? recorded.container : "history",
                 )}
+                // A working step under its agent's own comment joins that group.
+                stackNext={!!next?.active && next.container === "bubble"}
                 extensions={extensions}
                 session={session}
                 scope={scope}
