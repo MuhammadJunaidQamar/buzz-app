@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { noteKey, type Note } from "./model";
 import type { NotesWorkspace } from "./workspace";
-import { writeView } from "../../shared/view-state";
 import { DotsThreeIcon, ShareIcon } from "../../shared/design-system/icons";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import {
   MenuRoot,
   MenuTrigger,
   MenuPopup,
-  MenuNote,
-  MenuSubmenu,
-  MenuSubmenuPopup,
-  MenuSubmenuTrigger,
   MenuItem,
 } from "../../shared/design-system/ui/Menu";
 import { Select } from "../../shared/design-system/ui/Select";
@@ -28,7 +23,6 @@ export type NewDraft = {
   id: string;
   title: string;
   markdown: string;
-  autoSave?: boolean;
 };
 
 /** Creation uses the document editor; storage is allocated only after typing. */
@@ -46,7 +40,6 @@ export function NewNoteDocument({
   onCreated(
     note: Note,
     presentation: {
-      autoSave: boolean;
       focus?: NoteFocus | undefined;
       share: boolean;
     },
@@ -54,7 +47,6 @@ export function NewNoteDocument({
 }) {
   const [title, setTitle] = useState(initial.title);
   const [markdown, setMarkdown] = useState(initial.markdown);
-  const [autoSave, setAutoSave] = useState(initial.autoSave ?? true);
   const [source, setSource] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [share, setShare] = useState(false);
@@ -79,8 +71,8 @@ export function NewNoteDocument({
   const lastEditAt = useRef(-Infinity);
   const attempt = useRef<NewDraft | undefined>(undefined);
   const draft = useMemo(
-    () => ({ id: initial.id, title, markdown, autoSave }),
-    [initial.id, title, markdown, autoSave],
+    () => ({ id: initial.id, title, markdown }),
+    [initial.id, title, markdown],
   );
   const latest = useRef(draft);
   latest.current = draft;
@@ -107,11 +99,6 @@ export function NewNoteDocument({
           title: nextTitle,
           markdown,
         });
-      writeView(
-        workspace.session.scope,
-        `note-auto-save:${noteKey(note)}`,
-        autoSave,
-      );
       const selection = editor.current?.selection();
       const focus: NoteFocus | undefined =
         document.activeElement === titleInput.current
@@ -125,7 +112,6 @@ export function NewNoteDocument({
             ? { target: "body", ...selection }
             : undefined;
       callbacks.current.onCreated(note, {
-        autoSave,
         focus: share ? undefined : focus,
         share,
       });
@@ -136,16 +122,7 @@ export function NewNoteDocument({
       return handOff();
     const timer = window.setTimeout(handOff, remaining);
     return () => window.clearTimeout(timer);
-  }, [
-    accepted,
-    composing,
-    linkOpen,
-    title,
-    markdown,
-    autoSave,
-    workspace,
-    share,
-  ]);
+  }, [accepted, composing, linkOpen, title, markdown, workspace, share]);
   useEffect(() => {
     if (!dirty) return;
     const prevent = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -192,7 +169,6 @@ export function NewNoteDocument({
   useEffect(() => {
     if (
       !active ||
-      !autoSave ||
       !(title.trim() || markdown.trim()) ||
       accepted ||
       error ||
@@ -206,17 +182,7 @@ export function NewNoteDocument({
       AUTO_SAVE_IDLE_MS,
     );
     return () => window.clearTimeout(timer);
-  }, [
-    active,
-    autoSave,
-    accepted,
-    error,
-    composing,
-    linkOpen,
-    busy,
-    title,
-    markdown,
-  ]);
+  }, [active, accepted, error, composing, linkOpen, busy, title, markdown]);
   return (
     <article className={styles.documentPane} aria-label="New doc">
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: blank-space clicks extend the existing textbox hit area; keyboard users reach that textbox with Tab. */}
@@ -280,11 +246,11 @@ export function NewNoteDocument({
             ]}
           />
           <NoteSaveAction
-            shown={(dirty || !!attempt.current) && (!autoSave || !!error)}
+            shown={!!error}
             loading={busy}
             onClick={() => void save()}
           >
-            {error ? "Retry save" : "Save"}
+            Retry save
           </NoteSaveAction>
           <IconButton
             aria-label="Share doc"
@@ -306,19 +272,6 @@ export function NewNoteDocument({
               }
             />
             <MenuPopup>
-              <MenuSubmenu>
-                <MenuSubmenuTrigger>Revision history</MenuSubmenuTrigger>
-                <MenuSubmenuPopup aria-label="Revision history">
-                  <MenuItem
-                    onClick={() => {
-                      setAutoSave(!autoSave);
-                    }}
-                  >
-                    {autoSave ? "Disable auto-save" : "Enable auto-save"}
-                  </MenuItem>
-                  <MenuNote>No saved revisions yet.</MenuNote>
-                </MenuSubmenuPopup>
-              </MenuSubmenu>
               <MenuItem onClick={() => setSource(!source)}>
                 {source ? "Formatted text" : "Markdown source"}
               </MenuItem>
@@ -340,7 +293,9 @@ export function NewNoteDocument({
             }}
             linkOpen={active && linkOpen}
             onLinkOpenChange={setLinkOpen}
-            onSave={() => void save()}
+            onSave={() => {
+              if (error) void save();
+            }}
             toolbarTarget={toolbarTarget}
             source={source}
             onSourceChange={setSource}

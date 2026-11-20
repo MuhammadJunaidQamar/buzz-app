@@ -16,7 +16,7 @@ import type { RelaySession } from "../../features/relay/session";
 import { eventDto } from "../../features/relay/events";
 import { noteTools } from "./tools";
 import type { NotesWorkspace } from "./workspace";
-import { readView, writeView } from "../../shared/view-state";
+import { writeView } from "../../shared/view-state";
 import { NoteDocument } from "./NoteDocument";
 import { NoteMarkdown } from "./NoteMarkdown";
 
@@ -28,7 +28,6 @@ it.each([false, true])(
     const f = await workspaceFixture();
     const note = f.seed("Plan", "Body");
     if (cachedDraft) {
-      writeView(f.session.scope, `note-auto-save:${noteKey(note)}`, false);
       f.workspace.drafts.set(noteKey(note), {
         base: note,
         title: note.title,
@@ -66,7 +65,7 @@ it.each([false, true])(
   },
 );
 
-async function fixture(automatic = true) {
+async function fixture(legacyAutoSaveDisabled = false) {
   const followers = new Set<
     Parameters<RelaySession["artifacts"]["follow"]>[1]
   >();
@@ -86,23 +85,21 @@ async function fixture(automatic = true) {
   }));
   const { workspace } = f;
   const note = f.seed("Plan", "Original body");
-  const preference = `note-auto-save:${noteKey(note)}`;
-  if (!automatic) writeView(f.session.scope, preference, false);
+  if (legacyAutoSaveDisabled)
+    writeView(f.session.scope, `note-auto-save:${noteKey(note)}`, false);
   const realSave = workspace.save;
   const save = vi.spyOn(workspace, "save");
   const onChange = vi.fn();
-  const mount = () =>
-    render(
-      <StrictMode>
-        <NoteDocument
-          address={note}
-          workspace={workspace}
-          onOpen={vi.fn()}
-          onChange={onChange}
-        />
-      </StrictMode>,
-    );
-  const view = mount();
+  const view = render(
+    <StrictMode>
+      <NoteDocument
+        address={note}
+        workspace={workspace}
+        onOpen={vi.fn()}
+        onChange={onChange}
+      />
+    </StrictMode>,
+  );
   const title = await screen.findByRole("textbox", { name: "Title" });
   await waitFor(() => {
     expect(title).toHaveValue("Plan");
@@ -115,11 +112,9 @@ async function fixture(automatic = true) {
     ...f,
     workspace,
     note,
-    preference,
     save,
     realSave,
     view,
-    mount,
     title,
     change,
     onChange,
@@ -134,8 +129,8 @@ async function saved(save: MockInstance<NotesWorkspace["save"]>) {
   });
 }
 
-it("saves changed content after idle, stays in Editing and skips unchanged content", async () => {
-  const f = await fixture();
+it("auto-saves after idle even with a legacy disabled preference and skips unchanged content", async () => {
+  const f = await fixture(true);
   await advance(10_000);
   expect(f.save).not.toHaveBeenCalled();
   f.change("Final plan");
@@ -304,53 +299,6 @@ it("accepts a remote revision while clean and editing, then preserves a dirty dr
   expect(f.save).not.toHaveBeenCalled();
 });
 
-it("persists Disable auto-save per page and account, cancels the timer, and keeps manual Save in action order", async () => {
-  const f = await fixture();
-  f.change("Manual plan");
-  await advance(1000);
-  fireEvent.click(screen.getByRole("button", { name: "Doc actions" }));
-  await advance(0);
-  expect(
-    screen.queryByRole("menuitem", { name: "Disable auto-save" }),
-  ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("menuitem", { name: "Revision history" }));
-  await advance(0);
-  fireEvent.click(screen.getByRole("menuitem", { name: "Disable auto-save" }));
-  await advance(10_000);
-  expect(f.save).not.toHaveBeenCalled();
-  expect(readView(f.session.scope, f.preference, true)).toBe(false);
-  const manual = screen.getByRole("button", { name: /^Save$/ });
-  const mode = screen.getByRole("combobox", { name: "Doc mode" });
-  const refresh = screen.getByRole("button", { name: "Refresh doc" });
-  expect(
-    mode.compareDocumentPosition(manual) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  expect(
-    manual.compareDocumentPosition(refresh) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  fireEvent.click(manual);
-  await saved(f.save);
-  expect(f.save).toHaveBeenCalledOnce();
-  f.view.unmount();
-  vi.useRealTimers();
-  f.mount();
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Doc actions" })).toBeEnabled(),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Doc actions" }));
-  fireEvent.click(
-    await screen.findByRole("menuitem", { name: "Revision history" }),
-  );
-  expect(
-    await screen.findByRole("menuitem", { name: "Enable auto-save" }),
-  ).toBeVisible();
-  const other = f.seed("Other doc", "Body");
-  expect(
-    readView(f.session.scope, `note-auto-save:${noteKey(other)}`, true),
-  ).toBe(true);
-  expect(readView("other-account", f.preference, true)).toBe(true);
-});
-
 it("preserves a concurrent draft and does not overwrite until the user resolves the conflict", async () => {
   const f = await fixture();
   f.change("My draft");
@@ -387,8 +335,8 @@ it("cancels idle saves on unmount while retaining the workspace draft", async ()
   );
 });
 
-async function historyFixture(automatic = false, deleted = false) {
-  const f = await fixture(automatic);
+async function historyFixture(deleted = false) {
+  const f = await fixture();
   vi.useRealTimers();
   const current = await f.realSave(
     f.note,
@@ -412,33 +360,30 @@ async function previewOriginal() {
   await within(preview).findByRole("button", { name: "Restore this version" });
   return preview;
 }
-it.each([false, true])(
-  "restores immediately as a new head and keeps history (auto-save=%s)",
-  async (automatic) => {
-    const f = await historyFixture(automatic);
-    const preview = await previewOriginal();
-    fireEvent.click(
-      within(preview).getByRole("button", { name: "Restore this version" }),
-    );
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-    );
-    expect(f.title).toHaveValue("Plan");
-    expect(f.save).toHaveBeenCalledOnce();
-    expect(f.save.mock.calls[0]?.[0].revision).toBe(f.current.revision);
-    expect(f.save.mock.calls[0]?.[2]).toBe("update");
-    const history = await f.workspace.history(f.note);
-    expect(history.revisions.map((note) => note.markdown)).toEqual([
-      "Original body",
-      "New body",
-      "Original body",
-    ]);
-    expect(history.revisions[0]?.revision).not.toBe(f.note.revision);
-    expect(f.workspace.drafts.size).toBe(0);
-  },
-);
+it("restores immediately as a new head and keeps history", async () => {
+  const f = await historyFixture();
+  const preview = await previewOriginal();
+  fireEvent.click(
+    within(preview).getByRole("button", { name: "Restore this version" }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(f.title).toHaveValue("Plan");
+  expect(f.save).toHaveBeenCalledOnce();
+  expect(f.save.mock.calls[0]?.[0].revision).toBe(f.current.revision);
+  expect(f.save.mock.calls[0]?.[2]).toBe("update");
+  const history = await f.workspace.history(f.note);
+  expect(history.revisions.map((note) => note.markdown)).toEqual([
+    "Original body",
+    "New body",
+    "Original body",
+  ]);
+  expect(history.revisions[0]?.revision).not.toBe(f.note.revision);
+  expect(f.workspace.drafts.size).toBe(0);
+});
 it("confirms pending edits, cancels without saving, and keeps the draft on restore failure", async () => {
-  const f = await historyFixture(true);
+  const f = await historyFixture();
   f.change("Keep my draft");
   const preview = await previewOriginal();
   vi.useFakeTimers();
@@ -530,7 +475,7 @@ it("preserves a draft when another author wins before restore", async () => {
   expect((await f.workspace.open(f.note)).title).toBe("Remote winner");
 });
 it("restores a deleted page directly from a retained version", async () => {
-  const f = await historyFixture(false, true);
+  const f = await historyFixture(true);
   const preview = await previewOriginal();
   fireEvent.click(
     within(preview).getByRole("button", { name: "Restore this version" }),
@@ -544,7 +489,7 @@ it("restores a deleted page directly from a retained version", async () => {
 });
 
 it("previews the last content of a deleted page and restores it in one click after a failed write", async () => {
-  const f = await historyFixture(false, true);
+  const f = await historyFixture(true);
   await screen.findByText("Original body");
   expect(screen.getByRole("status")).toHaveTextContent("Deleted");
   expect(screen.getByRole("status")).not.toHaveTextContent("Saved");

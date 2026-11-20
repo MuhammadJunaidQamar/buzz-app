@@ -10,9 +10,8 @@ The collection shows the docs you can read. Search by title or content.
 Loaded collections follow revisions and access changes.
 Revoked docs are removed. Deleted docs are hidden from ordinary agent lists and
 remain available through explicit reads, retained history and Show deleted.
-Edits save automatically after a pause; Doc actions → Revision history lets you
-turn auto-save off and use Save instead. Browsing within Docs retains unsaved
-drafts for the connected session. Unsaved work is not a synced or permanent backup.
+Edits save automatically after a pause. Use Retry save after a failed save.
+Browsing within Docs retains unsaved drafts for the connected session. Unsaved work is not a synced or permanent backup.
 
 Share doc controls membership and general access. New docs are private. View only
 lets community members read, while editors can change content. Links grant no

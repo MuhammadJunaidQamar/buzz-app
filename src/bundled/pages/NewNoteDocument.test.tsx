@@ -5,7 +5,6 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import { StrictMode } from "react";
 import { expect, it, vi } from "vitest";
 import { noteKey } from "./model";
-import { readView } from "../../shared/view-state";
 import { NewNoteDocument, type NewDraft } from "./NewNoteDocument";
 
 async function fixture(initial: Partial<NewDraft> = {}) {
@@ -76,32 +75,23 @@ it("opens a fresh editor without allocating storage, then auto-saves after idle"
   );
 });
 
-it("saves body-only pages with an untitled fallback and honors manual saving", async () => {
+it("auto-saves body-only docs with an untitled fallback", async () => {
   const f = await fixture({ markdown: "First thought" });
   fireEvent.click(screen.getByRole("button", { name: "Doc actions" }));
   await advance(0);
   expect(
-    screen.queryByRole("menuitem", { name: "Disable auto-save" }),
-  ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("menuitem", { name: "Revision history" }));
-  await advance(0);
+    screen.getByRole("menuitem", { name: "Markdown source" }),
+  ).toBeVisible();
   expect(
-    screen.getByRole("menu", { name: "Revision history" }),
-  ).toHaveTextContent("No saved revisions yet.");
+    screen.queryByRole("menuitem", { name: "Revision history" }),
+  ).toBeNull();
   expect(f.create).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("menuitem", { name: "Disable auto-save" }));
-  await advance(15_000);
-  expect(f.create).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+  await advance(1500);
   await f.finishCreate();
   expect(f.create.mock.calls[0]?.[0]).toMatchObject({
     title: "Untitled doc",
     markdown: "First thought",
   });
-  const note = f.onCreated.mock.calls[0]?.[0];
-  expect(
-    readView(f.session.scope, `note-auto-save:${noteKey(note)}`, true),
-  ).toBe(false);
 });
 
 it.each(["typing", "composition"])(
@@ -208,7 +198,7 @@ it("creates a private empty page when Share is explicitly requested", async () =
   fireEvent.click(screen.getByRole("button", { name: "Share doc" }));
   await f.finishCreate();
   const [note, presentation] = f.onCreated.mock.calls[0] ?? [];
-  expect(presentation).toMatchObject({ share: true, autoSave: true });
+  expect(presentation).toMatchObject({ share: true });
   expect(f.channels.get(note.channel)?.roles).toEqual({
     [f.viewer.pubkey]: "owner",
   });

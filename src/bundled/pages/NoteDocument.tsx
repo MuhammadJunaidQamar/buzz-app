@@ -19,7 +19,6 @@ import { useIdentityNames } from "../../features/identity-names/react";
 import { avatarMedia } from "../../shared/avatar-source";
 import { writeClipboardText } from "../../shared/clipboard";
 import { formatPublicKey } from "../../shared/identity/public-key";
-import { readView, subscribeView, writeView } from "../../shared/view-state";
 import {
   ArrowsClockwiseIcon,
   DotsThreeIcon,
@@ -77,7 +76,6 @@ export function NoteDocument({
   onViewChange,
   active = true,
   initialFocus,
-  initialAutoSave,
 }: {
   address: NoteAddress;
   workspace: NotesWorkspace;
@@ -91,7 +89,6 @@ export function NoteDocument({
   onViewChange?: ((view: DocumentView) => void) | undefined;
   active?: boolean;
   initialFocus?: NoteFocus | undefined;
-  initialAutoSave?: boolean | undefined;
 }) {
   const cachedDraft = useRef(workspace.drafts.get(noteKey(address))).current;
   const [note, setNote] = useState<Note | undefined>(cachedDraft?.base);
@@ -114,27 +111,6 @@ export function NoteDocument({
   const [composing, setComposing] = useState(false);
   const saveRequest = useRef<AbortController | null>(null);
   const refreshAfterSave = useRef(false);
-  const autoSaveKey = `note-auto-save:${noteKey(address)}`;
-  const [autoSave, setAutoSave] = useState(
-    () =>
-      readView<unknown>(
-        workspace.session.scope,
-        autoSaveKey,
-        initialAutoSave ?? true,
-      ) !== false,
-  );
-  useEffect(() => {
-    const read = () =>
-      setAutoSave(
-        readView<unknown>(
-          workspace.session.scope,
-          autoSaveKey,
-          initialAutoSave ?? true,
-        ) !== false,
-      );
-    read();
-    return subscribeView(workspace.session.scope, read);
-  }, [workspace, autoSaveKey, initialAutoSave]);
   useEffect(() => () => saveRequest.current?.abort(), []);
   const actionsTrigger = useRef<HTMLButtonElement>(null);
   const [historySelection, setHistorySelection] = useState<{
@@ -148,12 +124,7 @@ export function NoteDocument({
   const [toolbarTarget, setToolbarTarget] = useState<HTMLDivElement | null>(
     null,
   );
-  const [error, setError] = useState(
-    initialAutoSave !== undefined &&
-      readView(workspace.session.scope, autoSaveKey, undefined) === undefined
-      ? "Your auto-save setting could not be remembered on this device."
-      : "",
-  );
+  const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [unavailable, setUnavailable] = useState(!!cachedDraft);
   const [conflict, setConflict] = useState<Note>();
@@ -427,7 +398,7 @@ export function NoteDocument({
     }
   };
   const save = useCallback(
-    async (automatic = false, revision?: Note) => {
+    async (revision?: Note) => {
       const current = latest.current;
       const base = current.note;
       if (
@@ -475,9 +446,6 @@ export function NoteDocument({
           setStatus("Saved");
           return;
         }
-        const unchanged =
-          latest.current.title === current.title &&
-          latest.current.markdown === current.markdown;
         // Advance the accepted base without replacing edits made in flight.
         latest.current = {
           ...latest.current,
@@ -487,7 +455,6 @@ export function NoteDocument({
         setNote(next);
         setRestoreFrom(undefined);
         callbacks.current.onChange(next);
-        if (!automatic && unchanged) setEditing(false);
         setStatus("Saved");
       } catch (error) {
         if (request.signal.aborted) return;
@@ -505,11 +472,10 @@ export function NoteDocument({
         }
       }
     },
-    [workspace, refresh, setEditing, adopt, setDialog],
+    [workspace, refresh, adopt, setDialog],
   );
   useEffect(() => {
     if (
-      !autoSave ||
       dialog === "history" ||
       !note ||
       !hasEdits(note, { title, markdown }) ||
@@ -524,10 +490,9 @@ export function NoteDocument({
       saving
     )
       return;
-    const timer = window.setTimeout(() => void save(true), 1500);
+    const timer = window.setTimeout(() => void save(), 1500);
     return () => window.clearTimeout(timer);
   }, [
-    autoSave,
     dialog,
     canEdit,
     unavailable,
@@ -687,16 +652,12 @@ export function NoteDocument({
             </div>
           )}
           <NoteSaveAction
-            shown={
-              !!note &&
-              !!(dirty || restoreFrom) &&
-              (!autoSave || !!saveError || !!restoreFrom)
-            }
+            shown={!!note && ((dirty && !!saveError) || !!restoreFrom)}
             loading={saving}
             disabled={busy || !!conflict || !canEdit || unavailable}
             onClick={() => void save()}
           >
-            {note?.deleted ? "Restore doc" : saveError ? "Retry save" : "Save"}
+            {restoreFrom ? "Restore doc" : "Retry save"}
           </NoteSaveAction>
           {note?.deleted && canEdit && !unavailable && (
             <Button
@@ -704,7 +665,7 @@ export function NoteDocument({
               size="sm"
               disabled={busy || !!conflict || !deletedPreview?.editable}
               loading={saving}
-              onClick={() => void save(false, deletedPreview)}
+              onClick={() => void save(deletedPreview)}
             >
               Restore
             </Button>
@@ -768,29 +729,7 @@ export function NoteDocument({
                         offset,
                       });
                     }}
-                  >
-                    {canEdit && !note.deleted && (
-                      <MenuItem
-                        onClick={() => {
-                          const enabled = !autoSave;
-                          setAutoSave(enabled);
-                          setSaveError("");
-                          if (
-                            !writeView(
-                              workspace.session.scope,
-                              autoSaveKey,
-                              enabled,
-                            )
-                          )
-                            setError(
-                              "This auto-save setting could not be remembered on this device.",
-                            );
-                        }}
-                      >
-                        {autoSave ? "Disable auto-save" : "Enable auto-save"}
-                      </MenuItem>
-                    )}
-                  </NoteHistoryMenu>
+                  />
                   {canEdit && !note.deleted && (
                     <MenuItem
                       disabled={busy || saving || dirty}
@@ -807,8 +746,7 @@ export function NoteDocument({
         {error && <p role="alert">{error}</p>}
         {saveError && (
           <p role="alert">
-            {autoSave ? "Auto-save is paused." : "Saving failed."} Your draft is
-            kept. {saveError}
+            Auto-save is paused. Your draft is kept. {saveError}
           </p>
         )}
         {note && !unavailable && !canEdit && !note.deleted && (
@@ -838,7 +776,9 @@ export function NoteDocument({
                 onLinkOpenChange={(open) =>
                   setDialog(open ? "link" : undefined)
                 }
-                onSave={() => void save()}
+                onSave={() => {
+                  if (saveError || restoreFrom) void save();
+                }}
               >
                 <NoteMarkdown
                   text={
@@ -873,7 +813,7 @@ export function NoteDocument({
             trigger={actionsTrigger}
             selection={view ?? historySelection ?? {}}
             onClose={() => setDialog(undefined)}
-            onRestore={(revision) => void save(false, revision)}
+            onRestore={(revision) => void save(revision)}
           />
         )}
         {note && dialog === "delete" && (

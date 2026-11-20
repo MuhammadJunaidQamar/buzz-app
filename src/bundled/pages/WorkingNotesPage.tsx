@@ -190,7 +190,6 @@ export function WorkingNotesCommunity({
   const drafts = useRef(new Map<string, NewDraft>());
   const createdDrafts = useRef(new Map<string, NoteAddress>());
   const createdFocus = useRef(new Map<string, NoteFocus>());
-  const createdAutoSave = useRef(new Map<string, boolean>());
   const [opened, setOpened] = useState<NoteAddress[]>(() =>
     initial ? [initial] : [],
   );
@@ -348,7 +347,6 @@ export function WorkingNotesCommunity({
                 <NoteDocument
                   address={address}
                   initialFocus={createdFocus.current.get(key)}
-                  initialAutoSave={createdAutoSave.current.get(key)}
                   workspace={workspace}
                   active={selected === key}
                   view={
@@ -387,9 +385,8 @@ export function WorkingNotesCommunity({
                 initial={draft}
                 active={selected === `new:${draft.id}`}
                 onDraftChange={(next) => drafts.current.set(next.id, next)}
-                onCreated={(note, { autoSave, focus, share }) => {
+                onCreated={(note, { focus, share }) => {
                   if (focus) createdFocus.current.set(noteKey(note), focus);
-                  createdAutoSave.current.set(noteKey(note), autoSave);
                   createdDrafts.current.set(draft.id, noteAddress(note));
                   drafts.current.delete(draft.id);
                   changed(note);

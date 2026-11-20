@@ -6,13 +6,6 @@ async function pageAction(page, article, name) {
   await page.getByRole("menuitem", { name, exact: true }).click();
 }
 
-async function manual(page, article) {
-  await pageAction(page, article, "Revision history");
-  await page
-    .getByRole("menuitem", { name: "Disable auto-save", exact: true })
-    .click();
-}
-
 // Browser boundary: plugin composition, native rich editing, mounted live delivery,
 // retained view state and responsive layout. Policy permutations live in Vitest.
 test("edits and preserves drafts using host UI, then adopts an agent revision without rewriting it", async ({
@@ -69,7 +62,6 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
   }
   await copyDocLink.click();
   await expect(article.getByRole("status")).toHaveText("Doc link copied");
-  await manual(page, article);
   const body = article.getByRole("textbox", { name: "Doc body", exact: true });
   const [h1, h2] = await article
     .getByRole("heading", { name: /Connected notes|Supporting research/ })
@@ -104,12 +96,10 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
     .getByRole("link", { name: "Connected pages plan", exact: true })
     .click();
   await expect(body).toHaveText("A draft retained while browsing.");
-  await article.getByRole("button", { name: "Save", exact: true }).click();
   await expect(article.getByRole("status")).toHaveText(/^Saved /);
-  await article
-    .getByRole("combobox", { name: "Doc mode", exact: true })
-    .click();
-  await page.getByRole("option", { name: "Editing", exact: true }).click();
+  await expect(
+    article.getByRole("button", { name: "Save", exact: true }),
+  ).toHaveCount(0);
   const remote = "# Agent update\n\n- retain spacing\n- no echo\n";
   const saved = await page.evaluate(
     (markdown) =>
@@ -138,6 +128,9 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
     name: /Connected pages plan.*Carl.*Current/,
   });
   await expect(currentRevision).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: /auto-save/i })).toHaveCount(
+    0,
+  );
   const olderRevision = page
     .getByRole("menuitem", { name: /Connected pages plan.*You/ })
     .first();
@@ -172,13 +165,18 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
     article.getByRole("textbox", { name: "Markdown", exact: true }),
   ).toHaveValue(`${remote}\nUnsaved source edit. Rich edit.`.trimEnd());
   await pageAction(page, article, "Formatted text");
-  expect(
-    await page.evaluate(
-      () =>
-        window.workingNotesFixture.head(window.workingNotesFixture.plan.id)
-          .revision,
-    ),
-  ).toBe(saved.revision);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.workingNotesFixture.head(window.workingNotesFixture.plan.id)
+            .markdown,
+      ),
+    )
+    .toBe(
+      `${remote}
+Unsaved source edit. Rich edit.`.trimEnd(),
+    );
   for (const theme of ["light", "dark"]) {
     for (const width of [1440, 480]) {
       await page.setViewportSize({ width, height: 950 });
@@ -209,8 +207,13 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
       ).toBe(true);
       await title.fill(savedTitle);
       expect((await title.boundingBox()).height).toBe(shortHeight);
+      await expect(article.getByRole("status")).toHaveText(/^Saved /);
       await pageAction(page, article, "Revision history");
-      await expect(currentRevision).toBeInViewport({ ratio: 1 });
+      await expect(
+        page.getByRole("menuitem", {
+          name: /Connected pages plan.*You.*Current/,
+        }),
+      ).toBeInViewport({ ratio: 1 });
       const bounds = await page
         .getByRole("menu", { name: "Revision history" })
         .boundingBox();
