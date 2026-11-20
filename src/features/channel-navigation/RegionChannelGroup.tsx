@@ -363,11 +363,24 @@ export function RegionChannelGroup(props: SoloChannelGroupProps) {
                 label={`Actions for ${channel.name}`}
                 openDetails={() => void openDetails()}
                 leadingAction={
-                  leading && (
-                    <MenuItem onClick={activateLeading}>
-                      {leading.label}
-                    </MenuItem>
-                  )
+                  <>
+                    {leading && (
+                      <MenuItem onClick={activateLeading}>
+                        {leading.label}
+                      </MenuItem>
+                    )}
+                    {props.headerMenuActions?.map((action) => (
+                      <MenuItem
+                        key={action.id}
+                        onClick={() => {
+                          if (eligible(current()))
+                            void context.runAction(() => action.onSelect());
+                        }}
+                      >
+                        {action.label}
+                      </MenuItem>
+                    ))}
+                  </>
                 }
                 startChat={
                   newTask && <MenuItem onClick={newTask}>New task</MenuItem>
