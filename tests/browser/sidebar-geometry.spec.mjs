@@ -595,13 +595,17 @@ test("the unified sidebar fills its rows and keeps heading actions in their row 
         const actions = heading.querySelector(
           ":scope > .navigation-section-heading-actions",
         );
-        // Quiet actions stay outside the heading's layout and hit testing.
+        // The two reveal modes keep hidden actions out of hit testing.
         const collapsed =
           actions?.hasAttribute("data-navigation-reveal") &&
           getComputedStyle(actions).opacity === "0";
         if (collapsed) {
           const style = getComputedStyle(actions);
-          if (style.position !== "absolute" || style.pointerEvents !== "none")
+          const noContentWidth =
+            actions.dataset.navigationReveal === "overlay"
+              ? style.position === "absolute"
+              : style.maxWidth === "0px" && style.overflow === "hidden";
+          if (!noContentWidth || style.pointerEvents !== "none")
             problems.push(
               `${name}: hidden actions affect layout or hit testing`,
             );
