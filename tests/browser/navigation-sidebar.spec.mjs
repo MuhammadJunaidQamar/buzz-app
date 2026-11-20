@@ -159,14 +159,16 @@ test.describe("workspace heading resize", () => {
       }, scale);
       for (const width of ["Home", "End"]) {
         await handle.press(width);
+        const label = heading.getByText("Work", { exact: true });
+        const resting = await label.boundingBox();
         await heading.hover();
         await expect(arrow).toBeVisible();
+        expect(await label.boundingBox()).toEqual(resting);
         await expect
           .poll(async () =>
-            heading.evaluate((row) => {
-              const label = row
-                .querySelector("summary")
-                .firstElementChild.getBoundingClientRect();
+            label.evaluate((title) => {
+              const row = title.closest(".navigation-section-heading");
+              const label = title.getBoundingClientRect();
               const control = row
                 .querySelector(".buzz-split-button")
                 .getBoundingClientRect();

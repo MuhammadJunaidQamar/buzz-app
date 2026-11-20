@@ -746,9 +746,12 @@ appTest.describe("Solo header accessories", () => {
         await page.keyboard.press("Escape");
         await expect(menu).toBeHidden();
       }
-      await headers[0].group
-        .getByRole("button", { name: "Actions for Work" })
-        .press("Enter");
+      const work = headers[0].group;
+      const workActions = work.getByRole("button", {
+        name: "Actions for Work",
+      });
+      await work.getByRole("button", { name: "Work", exact: true }).hover();
+      await workActions.click();
       await expect(
         page.getByRole("menuitem", { name: "New task" }),
       ).toBeVisible();
@@ -756,6 +759,9 @@ appTest.describe("Solo header accessories", () => {
         page.getByRole("menuitem", { name: "New chat" }),
       ).toBeVisible();
       await page.keyboard.press("Escape");
+      await expect(workActions).toBeFocused();
+      await sidebar.getByRole("button", { name: "Other", exact: true }).hover();
+      await expect(workActions.locator("..")).toHaveCSS("opacity", "0");
       const channelGroup = headers[1].group;
       await page.evaluate(() => {
         document.documentElement.style.fontSize = "24px";

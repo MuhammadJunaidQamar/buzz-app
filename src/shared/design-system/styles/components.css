@@ -1862,7 +1862,11 @@
             > [data-navigation-reveal="in-flow"]
           ),
         .navigation-section-heading-actions[data-has-metadata]:hover,
-        .navigation-section-heading-actions[data-has-metadata]:focus-within,
+        html[data-keyboard-navigation]
+          .navigation-section-heading-actions[data-has-metadata]:focus-within,
+        .navigation-section-heading-actions[data-has-metadata]:focus-within:not(
+          .buzz-sidebar-navigation:hover *
+        ),
         .navigation-section-heading-actions[data-has-metadata]:has(
           [aria-expanded="true"][aria-haspopup="menu"]
         ),
