@@ -32,8 +32,8 @@ export type NavigationSectionTrailing = {
 
 /**
  * One heading row: the label fills the available width and the actions hug the
- * trailing edge. Quiet actions overlay it by default. Use "in-flow" when
- * overlap would cover the label or its controls.
+ * trailing edge. Use "overlay" to keep the label width on hover. Use
+ * "in-flow" when overlap would cover the label or its controls.
  *
  * `disclosure` headings collapse their section. Their label is the feature's
  * own disclosure trigger, which keeps the row's inset as its hit area and
@@ -52,7 +52,7 @@ export function NavigationSectionHeading({
 }: {
   actions?: ReactNode;
   disclosure?: boolean;
-  revealActions?: boolean | "in-flow";
+  revealActions?: boolean | "overlay" | "in-flow";
   trailing?: NavigationSectionTrailing | undefined;
   children?: ReactNode;
 }) {

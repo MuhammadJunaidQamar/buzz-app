@@ -123,7 +123,7 @@ test("a unified Solo row describes and opens shared access", async ({
     generateSecretKey(),
   );
   const outer = page.locator("[data-channel-sidebar-row]").filter({ has: row });
-  const action = outer.locator("[data-channel-row-action]");
+  const action = outer.locator("[data-solo-row-action]");
   await expect(outer.locator("[data-channel-working]")).toBeVisible();
 
   const geometry = () =>
@@ -132,7 +132,7 @@ test("a unified Solo row describes and opens shared access", async ({
         element.querySelector(selector).getBoundingClientRect();
       const shared = rect("[data-solo-shared]");
       const badge = rect("[data-channel-working]");
-      const action = rect("[data-channel-row-action]");
+      const action = rect("[data-solo-row-action]");
       const fillEnd = parseFloat(getComputedStyle(element, "::before").right);
       const root = parseFloat(
         getComputedStyle(document.documentElement).fontSize,
@@ -175,6 +175,8 @@ test("a unified Solo row describes and opens shared access", async ({
       .toMatchObject({ sharedEndGap: 0, badgeInset: 0.625 });
     const { titleWidth } = await geometry();
     await shared.hover();
+    await expect(action).toHaveCSS("opacity", "0");
+    await action.hover();
     await expect(action).toHaveCSS("opacity", "1");
     await expect.poll(geometry).toMatchObject({ sharedEndGap: 0, titleWidth });
     await expect
@@ -206,9 +208,7 @@ async function expectTrailingAlignment(row, status, touch = false) {
       async () => {
         const action = await row.evaluate((button) => {
           const outer = button.closest("[data-solo-menu-id]");
-          const menu = outer?.querySelector(
-            "[data-solo-row-action], [data-channel-row-action]",
-          );
+          const menu = outer?.querySelector("[data-solo-row-action]");
           const shared = outer?.querySelector("[data-solo-shared]");
           if (!menu) throw new Error("Missing Solo row action");
           const rect = (node) => {
@@ -441,15 +441,12 @@ test("Solo sidebar shares working activity, keyboard preview and local panel nav
   await page
     .locator(`[data-solo-menu-id="${id}"]`)
     .screenshot({ path: info.outputPath("solo-working-selected.png") });
-  // This point belongs to the visible status at rest and the action on hover.
-  // It must stay actionable rather than becoming a clipped/dead trailing area.
-  const marker = await badge.boundingBox();
-  const x = marker.x + marker.width / 2,
-    y = marker.y + marker.height / 2;
-  await page.mouse.move(x, y);
   const action = page.locator(
     `[data-solo-menu-id="${id}"] [data-solo-row-action]`,
   );
+  await alpha.hover({ position: { x: 24, y: 14 } });
+  await expect(action).toHaveCSS("opacity", "0");
+  await action.hover();
   await expect(action).toHaveCSS("opacity", "1");
   // Bare row actions keep standard artwork, unlike glyph-state toggles.
   await expect(action.locator("svg")).toHaveCSS("width", "16px");

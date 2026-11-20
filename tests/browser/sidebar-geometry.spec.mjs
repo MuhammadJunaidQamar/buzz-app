@@ -46,7 +46,7 @@ test("working badges align in their rows and clear the Solo actions button", asy
   }
   const [soloRow] = rows;
   const chat = soloRow.locator(`button[data-channel-id="${solo}"]`);
-  const action = soloRow.locator("[data-channel-row-action]");
+  const action = soloRow.locator("[data-solo-row-action]");
   const preview = page.getByRole("dialog", { name: "Activity in Alpha" });
   const titleWidth = () =>
     chat
@@ -63,7 +63,7 @@ test("working badges align in their rows and clear the Solo actions button", asy
         .querySelector("[data-channel-working]")
         .getBoundingClientRect();
       const action = row
-        .querySelector("[data-channel-row-action]")
+        .querySelector("[data-solo-row-action]")
         .getBoundingClientRect();
       return action.left - badge.right;
     });
@@ -110,11 +110,15 @@ test("working badges align in their rows and clear the Solo actions button", asy
     const restingWidth = await titleWidth();
     await expect.poll(labelMask).toBe("none");
     await chat.hover({ position: { x: 24, y: 14 } });
+    await expect(action).toHaveCSS("opacity", "0");
+    await expect(preview).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(preview).toHaveCount(0);
+    await action.hover();
     await expect(action).toHaveCSS("opacity", "1");
     await expect.poll(labelMask).toContain("linear-gradient");
     await expect.poll(actionClearance).toBeGreaterThanOrEqual(0);
     await expect.poll(titleWidth).toBe(restingWidth);
-    await expect(preview).toBeVisible();
     await page.mouse.move(0, 0);
     // The preview temporarily owns Tab while its dismissal is in flight.
     await expect(preview).toHaveCount(0);
@@ -529,7 +533,7 @@ test("the unified sidebar fills its rows and keeps heading actions in their row 
   const chat = workspace.locator(`button[data-channel-id="${solo}"]`);
   await chat.click();
   await expect(chat).toHaveAttribute("aria-current", "page");
-  const action = workspace.locator("[data-channel-row-action]");
+  const action = workspace.locator("[data-solo-row-action]");
   const titleWidth = () =>
     chat
       .locator(".navigation-item-label")
@@ -676,6 +680,8 @@ test("the unified sidebar fills its rows and keeps heading actions in their row 
     // Revealing the action must keep the title at its resting width.
     const restingWidth = await titleWidth();
     await chat.hover({ position: { x: 24, y: 14 } });
+    await expect(action).toHaveCSS("opacity", "0");
+    await action.hover();
     await expect.poll(titleWidth).toBe(restingWidth);
     await expect(action).toHaveCSS("opacity", "1");
     await page.mouse.move(0, 0);

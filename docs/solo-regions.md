@@ -248,12 +248,10 @@ Hosts that predate this prop ignore it.
 
 Both headers also accept optional `headerMetadata: ReactNode` for compact,
 non-interactive content such as a relative activity time. The host displays
-it at the trailing edge. In a workspace, heading hover or focus on the actions
-replaces the metadata with Actions and the New task plus when available. The
-title and accessory keep their space. In a channel group, hovering the metadata
-slot or focusing its controls reveals its native actions. Those actions can
-cover an adjacent accessory. Touch shows the controls directly. New task also
-remains available in the menu.
+it at the trailing edge. Heading hover or focus on the actions replaces the
+metadata with Actions and New task when available. The title and accessory
+keep their space. Touch shows the controls directly. New task also remains
+available in the menu.
 
 Both headers accept optional `headerLeading` with a non-interactive `icon`, an
 action `label`, and an `onActivate` callback. This moves the caret before the

@@ -345,7 +345,7 @@ export function RegionChannelGroup(props: SoloChannelGroupProps) {
       <NavigationCard tone="tonal" body={body}>
         <NavigationSectionHeading
           disclosure
-          revealActions
+          revealActions="in-flow"
           trailing={{
             metadata: props.headerMetadata,
             accessory: accessory != null && (

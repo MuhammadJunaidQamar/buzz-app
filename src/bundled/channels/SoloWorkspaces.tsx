@@ -668,7 +668,7 @@ export function SoloWorkspaces({
         {(overflow) => (
           <NavigationSectionHeading
             disclosure
-            revealActions={trailing ? "in-flow" : true}
+            revealActions={trailing ? "in-flow" : project.id ? "overlay" : true}
             trailing={
               trailing && {
                 metadata: trailing.metadata,

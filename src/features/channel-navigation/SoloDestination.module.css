@@ -25,7 +25,7 @@
 .menu:is(
   :hover,
   [data-context-menu-present],
-  html[data-keyboard-navigation] .menu:has(:focus-visible),
+  :has(:focus-visible),
   :has([aria-expanded="true"][aria-haspopup="menu"])
 ):not(:has([aria-current="page"], [data-spring-loaded="on"]))::before {
   background: var(--affordance-panel-hover);
@@ -42,50 +42,30 @@
   display: none;
 }
 
+/* The source places the action and keeps its own Reveal content. */
 .menu [data-solo-row-action] {
   width: var(--session-action-size);
   height: var(--session-action-size);
   margin: 0;
+  pointer-events: auto;
 }
 .active {
   opacity: 0;
 }
 @media (hover: hover) {
-  /* Each menu resets its state so an outer row cannot reveal nested actions. */
-  .menu {
-    --solo-action-opacity: 0;
-    --solo-action-pointer-events: none;
-  }
-  .menu:is(
-    :hover:not(:has(.menu:hover)),
-    [data-context-menu-present],
-    html[data-keyboard-navigation]
-      .menu:has(:focus-visible):not(:has(.menu :focus-visible))
-  ) {
-    --solo-action-opacity: 1;
-    --solo-action-pointer-events: auto;
-  }
   .menu [data-solo-row-action] {
-    opacity: var(--solo-action-opacity);
-    pointer-events: var(--solo-action-pointer-events);
+    opacity: 0;
   }
-  .menu [data-solo-row-action][aria-expanded="true"] {
+  .menu [data-solo-row-action]:is(:hover, [aria-expanded="true"]),
+  .menu:is([data-context-menu-present], :has(:focus-visible))
+    [data-solo-row-action] {
     opacity: 1;
-    pointer-events: auto;
-  }
-  /* A source that wraps Actions keeps ownership of its layout. */
-  .menu > [data-solo-row-action] {
-    position: absolute;
-    z-index: 1;
-    inset-inline-end: 0;
-    top: 50%;
-    transform: translateY(-50%);
   }
 }
 .menu:is(
   :hover,
   [data-context-menu-present],
-  html[data-keyboard-navigation] .menu:has(:focus-visible),
+  :has(:focus-visible),
   :has([aria-expanded="true"][aria-haspopup="menu"])
 ) {
   .rest {

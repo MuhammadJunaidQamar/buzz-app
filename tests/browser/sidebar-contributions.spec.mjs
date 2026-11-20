@@ -564,7 +564,6 @@ appTest.describe("Solo header accessories", () => {
           accessory: "Mark Work workspace",
           activity: "3m",
           task: "Workspace task",
-          revealOnHeadingHover: true,
         },
         {
           group: sidebar.locator('[data-solo-channel-group="alpha"]'),
@@ -572,7 +571,6 @@ appTest.describe("Solo header accessories", () => {
           accessory: "Mark Alpha channel",
           activity: "1d",
           task: "Channel task",
-          revealOnHeadingHover: false,
         },
       ];
 
@@ -586,14 +584,7 @@ appTest.describe("Solo header accessories", () => {
           "data-color-mode",
           theme,
         );
-        for (const {
-          group,
-          title,
-          accessory,
-          activity,
-          task,
-          revealOnHeadingHover,
-        } of headers) {
+        for (const { group, title, accessory, activity, task } of headers) {
           const disclosure = group.getByRole("button", { name: /tasks/i });
           const action = group.getByRole("button", { name: accessory });
           const heading = group.getByRole("button", {
@@ -645,12 +636,8 @@ appTest.describe("Solo header accessories", () => {
             (await disclosure.boundingBox())?.x,
           );
           await heading.hover();
-          await expect(nativeMenu.locator("..")).toHaveCSS(
-            "opacity",
-            revealOnHeadingHover ? "1" : "0",
-          );
-          if (revealOnHeadingHover) await expect(metadata).toBeHidden();
-          else await expect(metadata).toBeVisible();
+          await expect(nativeMenu.locator("..")).toHaveCSS("opacity", "1");
+          await expect(metadata).toBeHidden();
           await page.mouse.move(
             activityBox.x + activityBox.width / 2,
             activityBox.y + activityBox.height / 2,
@@ -670,10 +657,7 @@ appTest.describe("Solo header accessories", () => {
           await expect(heading).not.toHaveAttribute("data-selected");
           await resize.focus();
           await heading.hover();
-          await expect(nativeMenu.locator("..")).toHaveCSS(
-            "opacity",
-            revealOnHeadingHover ? "1" : "0",
-          );
+          await expect(nativeMenu.locator("..")).toHaveCSS("opacity", "1");
 
           await page.mouse.move(0, 0);
           await action.focus();

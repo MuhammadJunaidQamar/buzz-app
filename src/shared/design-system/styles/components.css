@@ -1849,6 +1849,11 @@
     }
 
     .navigation-section-heading-actions[data-navigation-reveal="true"] {
+      max-width: 0;
+      overflow: hidden;
+    }
+
+    .navigation-section-heading-actions[data-navigation-reveal="overlay"] {
       position: absolute;
       inset-block: 0;
       inset-inline-end: 0;
@@ -1889,6 +1894,9 @@
     :is(
         .navigation-section-heading:hover,
         html[data-keyboard-navigation] .navigation-section-heading:focus-within,
+        .navigation-section-heading:has(
+          > .navigation-section-heading-actions[data-navigation-reveal="true"]:focus-within
+        ),
         .navigation-section-heading:not(.buzz-sidebar-navigation:hover *):has(
           [data-navigation-reveal]:focus-within
         ),
@@ -1901,6 +1909,8 @@
           [data-has-metadata] > .navigation-section-heading-buttons
         ) {
         opacity: 1;
+        max-width: none;
+        overflow: visible;
 
         &.navigation-section-heading-actions > *,
         &.navigation-section-heading-buttons {

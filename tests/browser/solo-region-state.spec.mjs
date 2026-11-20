@@ -92,9 +92,9 @@ test.describe("disabled plugin chat fallback", () => {
     const regionActions = sidebar.getByRole("button", {
       name: "Actions for Alpha",
     });
-    await page.mouse.move(0, 0);
-    await expect(regionActions).toHaveCSS("opacity", "0");
     await region.hover();
+    await expect(regionActions).toHaveCSS("opacity", "0");
+    await regionActions.hover();
     await expect(regionActions).toHaveCSS("opacity", "1");
     await regionActions.click();
     await expect(

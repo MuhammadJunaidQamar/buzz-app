@@ -104,7 +104,8 @@ test("sidebar headings keep readable space and compact disclosure targets at enl
                 fullTarget:
                   disclosure.left === slot.left &&
                   disclosure.right === slot.right &&
-                  Math.abs(slot.right - frame.right) < 0.5 &&
+                  (element.getAttribute("aria-label") !== "Team" ||
+                    Math.abs(slot.right - frame.right) < 0.5) &&
                   getComputedStyle(header.lastElementChild).pointerEvents ===
                     "none",
                 actionsContained:
