@@ -348,10 +348,6 @@ fn restore_geometry<R: Runtime>(
     saved: SavedGeometry,
     scales: Option<SavedScale>,
 ) -> tauri::Result<()> {
-    // Windows rescales on DPI change, so it keeps sending physical pixels.
-    let scales = scales.filter(|_| cfg!(not(windows)));
-    let saved = at_size_scale(saved, scales);
-    let recorded = scales.map(|scales| scales.scale);
     let monitors = window.available_monitors()?;
     let areas: Vec<_> = monitors
         .iter()
@@ -374,7 +370,7 @@ fn restore_geometry<R: Runtime>(
         let config = windows.first().cloned().unwrap_or_default();
         let startup = window.scale_factor()?;
         let (position, size, logical) =
-            restore_request(&saved, recorded, offset, startup, &areas, fallback, &config);
+            restore_plan(saved, scales, offset, startup, &areas, fallback, &config);
         // Validate the requested geometry BEFORE sending it. Native setters
         // may apply asynchronously (Linux/macOS); getters can still report the
         // startup frame.
@@ -387,6 +383,31 @@ fn restore_geometry<R: Runtime>(
         window.set_size(size)?;
     }
     Ok(())
+}
+
+/// The restore request for saved geometry and the scales recorded with it.
+fn restore_plan(
+    saved: SavedGeometry,
+    scales: Option<SavedScale>,
+    client_offset: PhysicalPosition<i32>,
+    startup: f64,
+    monitors: &[(PhysicalRect<i32, u32>, f64)],
+    fallback: (PhysicalRect<i32, u32>, f64),
+    config: &tauri::utils::config::WindowConfig,
+) -> (PhysicalPosition<i32>, PhysicalSize<u32>, Option<f64>) {
+    // Windows rescales on DPI change, so it keeps sending physical pixels.
+    let scales = scales.filter(|_| cfg!(not(windows)));
+    let saved = at_size_scale(saved, scales);
+    let recorded = scales.map(|scales| scales.scale);
+    restore_request(
+        &saved,
+        recorded,
+        client_offset,
+        startup,
+        monitors,
+        fallback,
+        config,
+    )
 }
 
 /// Expresses the saved positions in the size's pixels, each from its own scale.
@@ -1108,22 +1129,42 @@ mod tests {
         assert_eq!(scales, kept(2.0, 2.0, 1.0));
     }
 
+    /// Reads `state` and `scale` from disk as restore does, then plans the
+    /// restore as restore does, in logical units.
+    fn planned(
+        state: &Value,
+        scale: &[u8],
+        startup: f64,
+        monitors: &[(tauri::PhysicalRect<i32, u32>, f64)],
+    ) -> (tauri::LogicalPosition<f64>, tauri::LogicalSize<f64>) {
+        let dir = tempfile::tempdir().unwrap();
+        let live = tauri_plugin_window_state::DEFAULT_FILENAME;
+        std::fs::write(dir.path().join(live), serde_json::to_vec(state).unwrap()).unwrap();
+        std::fs::write(dir.path().join(super::SCALE), scale).unwrap();
+        let (saved, scales) = super::restore_input(dir.path(), live, "main", false).unwrap();
+        let offset = tauri::PhysicalPosition::new(0, 0);
+        let (position, size, logical) = super::restore_plan(
+            saved,
+            scales,
+            offset,
+            startup,
+            monitors,
+            monitors[0],
+            &config(),
+        );
+        let logical = logical.expect("sent in logical units");
+        (position.to_logical(logical), size.to_logical(logical))
+    }
+
     #[test]
     fn position_and_size_restore_each_at_its_own_scale() {
         let monitors = mixed_scale_monitors();
-        let scales = |position, prev| super::SavedScale {
-            scale: 2.0,
-            position: Some(position),
-            prev: Some(prev),
-        };
         // 1200x750 points cached on the 2x laptop, then moved to (2212, -200)
         // points on the 1x external without a Resized.
-        let saved = super::at_size_scale(
-            decode(&saved_state(2212, -200, 2400, 1500)),
-            Some(scales(1.0, 1.0)),
-        );
+        let state = saved_state(2212, -200, 2400, 1500);
+        let split = br#"{"main":{"scale":2.0,"position":1.0,"prev":1.0}}"#;
         assert_eq!(
-            logical_request(&saved, Some(2.0), 2.0, &monitors),
+            planned(&state, split, 2.0, &monitors),
             (
                 tauri::LogicalPosition::new(2212.0, -200.0),
                 tauri::LogicalSize::new(1200.0, 750.0)
@@ -1134,17 +1175,20 @@ mod tests {
         state["main"]["maximized"] = json!(true);
         state["main"]["prev_x"] = json!(2212);
         state["main"]["prev_y"] = json!(-200);
-        let saved = super::at_size_scale(decode(&state), Some(scales(2.0, 1.0)));
-        assert_eq!((saved.x, saved.y), (0, 66));
+        let prev = br#"{"main":{"scale":2.0,"position":2.0,"prev":1.0}}"#;
         assert_eq!(
-            logical_request(&saved, Some(2.0), 2.0, &monitors).0,
+            planned(&state, prev, 2.0, &monitors).0,
             tauri::LogicalPosition::new(2212.0, -200.0),
         );
         // An older file without position scales reads them as the size's.
-        let only = super::saved_scale(br#"{"main":{"scale":2.0}}"#, "main").unwrap();
-        assert_eq!((only.position(), only.prev()), (2.0, 2.0));
-        let unchanged = super::at_size_scale(decode(&saved_state(200, 66, 2400, 1500)), Some(only));
-        assert_eq!((unchanged.x, unchanged.y), (200, 66));
+        let state = saved_state(200, 66, 2400, 1500);
+        assert_eq!(
+            planned(&state, br#"{"main":{"scale":2.0}}"#, 1.0, &monitors),
+            (
+                tauri::LogicalPosition::new(100.0, 33.0),
+                tauri::LogicalSize::new(1200.0, 750.0)
+            ),
+        );
         assert_eq!(
             super::saved_scale(br#"{"main":{"scale":2.0,"prev":0}}"#, "main"),
             None
