@@ -137,12 +137,18 @@ test("sidebar headings keep readable space and compact disclosure targets at enl
   await resize.press("Home");
   await page.setViewportSize({ width: 1440, height: 1200 });
   const channels = summaries[0];
-  // The trailing edge before the revealed action buttons still toggles the
-  // section. Hover first: revealed actions take their width from the trigger.
-  await channels.hover();
+  // The space immediately before the overlaid actions toggles the section.
+  await channels.hover({ position: { x: 12, y: 10 } });
   const target = await channels.boundingBox();
+  const firstActionLeft = await channels.evaluate(
+    (summary) =>
+      summary
+        .closest(".navigation-section-heading")
+        .querySelector(".navigation-section-heading-actions button")
+        .getBoundingClientRect().left,
+  );
   await channels.click({
-    position: { x: target.width - 2, y: target.height / 2 },
+    position: { x: firstActionLeft - target.x - 2, y: target.height / 2 },
   });
   await expect(channels.locator("..")).not.toHaveAttribute("open");
   await channels.press("Enter");

@@ -132,7 +132,7 @@ test("a unified Solo row describes and opens shared access", async ({
         element.querySelector(selector).getBoundingClientRect();
       const shared = rect("[data-solo-shared]");
       const badge = rect("[data-channel-working]");
-      const action = rect("[data-solo-row-action]");
+      const action = rect("[data-channel-row-action]");
       const fillEnd = parseFloat(getComputedStyle(element, "::before").right);
       const root = parseFloat(
         getComputedStyle(document.documentElement).fontSize,

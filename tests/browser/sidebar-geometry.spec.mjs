@@ -205,19 +205,16 @@ const newOptions = (page) =>
 // Solo's New chat action stays in its heading at every scale.
 function controlsAgainstHeading(button) {
   const heading = button.closest(".navigation-section-heading");
-  const summary = heading.querySelector("summary").getBoundingClientRect();
   const control = button.getBoundingClientRect();
   const box = heading.getBoundingClientRect();
   const center = (rect) => rect.top + rect.height / 2;
   return {
-    afterHeadingLabel: control.left >= summary.right - 0.5,
     centered: Math.abs(center(control) - center(box)) < 1,
-    withinHeading: control.right <= box.right + 0.5,
+    withinHeading: control.left >= box.left && control.right <= box.right + 0.5,
   };
 }
 
 const expectedHeadingControls = {
-  afterHeadingLabel: true,
   centered: true,
   withinHeading: true,
 };

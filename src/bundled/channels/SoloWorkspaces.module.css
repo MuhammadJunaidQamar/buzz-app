@@ -138,32 +138,11 @@
     var(--channel-row-fill-end, 0%)
   );
 }
-[data-solo-row-action] {
-  opacity: 0;
-  pointer-events: auto;
-}
-.organizedRow [data-solo-row-action] {
+.organizedRow > [data-solo-row-action] {
   width: var(--session-action-size);
   height: var(--session-action-size);
   margin-inline-end: var(--session-trailing-end);
 }
-.organizedRow:is(
-    :hover,
-    [data-context-menu-present],
-    :has(:focus-visible),
-    :has([aria-expanded="true"][aria-haspopup="menu"])
-  )
-  [data-solo-row-action] {
-  opacity: 1;
-  pointer-events: auto;
-}
-@media (hover: none) {
-  [data-solo-row-action] {
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-
 /* The surface paints beneath the row's content without positioning it, so the
    trailing indicators measure from the row's end, under the hover action. */
 .organizedRow {
@@ -183,7 +162,7 @@
 .organizedRow:is(
   :hover,
   [data-context-menu-present],
-  :has(:focus-visible),
+  html[data-keyboard-navigation] .organizedRow:has(:focus-visible),
   :has([aria-expanded="true"][aria-haspopup="menu"])
 ):not(:has([aria-current="page"], [data-spring-loaded="on"]))::before {
   background: var(--affordance-panel-hover);
@@ -263,7 +242,7 @@
 .organizedRow:is(
     :hover,
     [data-context-menu-present],
-    :has(:focus-visible),
+    html[data-keyboard-navigation] .organizedRow:has(:focus-visible),
     :has([aria-expanded="true"][aria-haspopup="menu"])
   )
   [data-channel-activity] {
@@ -312,6 +291,10 @@
     inset-inline-end: var(--session-trailing-end);
     margin: 0;
   }
+  .organizedRow > [data-solo-row-action] {
+    opacity: 0;
+    pointer-events: none;
+  }
   /* Separate rules: the build wraps a list of :has() selectors in :is(), and
      WebKit restyles the whole document for each change under a non-subject
      :has() inside :is(). */
@@ -333,7 +316,7 @@
   .organizedRow:is(
     :hover,
     [data-context-menu-present],
-    :has(:focus-visible),
+    html[data-keyboard-navigation] .organizedRow:has(:focus-visible),
     :has([aria-expanded="true"][aria-haspopup="menu"])
   ) [data-solo-shared] {
     opacity: 1;
@@ -345,6 +328,16 @@
       var(--session-action-size)
     );
   }
+  .organizedRow:is(
+      :hover,
+      [data-context-menu-present],
+      html[data-keyboard-navigation] .organizedRow:has(:focus-visible)
+    )
+    > [data-solo-row-action],
+  .organizedRow > [data-solo-row-action][aria-expanded="true"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
   .sidebarContents
     .organizedRow:has([data-channel-activity], [data-solo-shared])
     > div
@@ -354,52 +347,19 @@
       var(--session-trailing-offset)
     );
   }
-  /* The row button already sits inside the gutter fill, so its padding
-     measures from the painted edge without adding the fill again. The pill
-     ends on the row inset, the overflow glyph's trailing edge.
-     Hover ties this rule's specificity, so it must stay after it. */
   .sidebarContents
     .organizedRow
     > div
     > [data-variant="row"]:has([data-solo-working-indicator]:not(:empty)) {
     padding-inline-end: var(--session-row-inset);
   }
-  .sidebarContents
-    .organizedRow:is(
-      :hover,
-      [data-context-menu-present],
-      :has(:focus-visible),
-      :has([aria-expanded="true"][aria-haspopup="menu"])
-    )
-    > div
-    > [data-variant="row"] {
-    padding-inline-end: calc(
-      var(--session-action-size) +
-      var(--session-trailing-offset)
-    );
-  }
-  .sidebarContents
-    .organizedRow:has([data-solo-shared]):is(
-      :hover,
-      [data-context-menu-present],
-      :has(:focus-visible),
-      :has([aria-expanded="true"][aria-haspopup="menu"])
-    )
-    > div
-    > [data-variant="row"] {
-    padding-inline-end: calc(
-      var(--session-action-size) *
-      2 +
-      var(--session-trailing-offset)
-    );
-  }
   .organizedRow:is(
       :hover,
       [data-context-menu-present],
-      :has(:focus-visible),
+      html[data-keyboard-navigation] .organizedRow:has(:focus-visible),
       :has([aria-expanded="true"][aria-haspopup="menu"])
     )
     [data-solo-working-indicator] {
-    display: none;
+    visibility: hidden;
   }
 }

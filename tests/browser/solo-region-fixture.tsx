@@ -89,6 +89,9 @@ export const soloRegionFixture: BundledPlugin = {
       const leadingHeader = new URL(location.href).searchParams.has(
         "leading-header",
       );
+      const wrapActions = new URL(location.href).searchParams.has(
+        "wrap-conversation-actions",
+      );
       function Workspaces({
         ui,
         binding,
@@ -226,7 +229,13 @@ export const soloRegionFixture: BundledPlugin = {
                       <ui.Card>
                         <c.Menu>
                           <c.Link label={c.name} />
-                          <c.Actions />
+                          {wrapActions ? (
+                            <span className="pointer-events-none absolute end-0 top-0">
+                              <c.Actions />
+                            </span>
+                          ) : (
+                            <c.Actions />
+                          )}
                         </c.Menu>
                       </ui.Card>
                     )}

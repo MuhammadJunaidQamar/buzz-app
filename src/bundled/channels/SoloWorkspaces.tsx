@@ -688,23 +688,28 @@ export function SoloWorkspaces({
               <>
                 {trailing?.hasInteractiveDecoration && newTask}
                 {overflow}
-                {!trailing && (
-                  <>
-                    {project.id &&
-                      workspaceComposition?.newAction(project.id, project.name)}
-                    {onNew &&
-                      !workspaceComposition &&
-                      (!compose || !project.id) && (
-                        <IconButton
-                          size="compact"
-                          aria-label={`New chat in ${project.name}`}
-                          title="New chat"
-                          icon={<PlusIcon size={15} strokeWidth={2.5} />}
-                          onClick={() => onNew(project.id || undefined)}
-                        />
-                      )}
-                  </>
-                )}
+                {newTask == null &&
+                  (trailing?.metadata == null ||
+                    typeof trailing.metadata === "boolean") && (
+                    <>
+                      {project.id &&
+                        workspaceComposition?.newAction(
+                          project.id,
+                          project.name,
+                        )}
+                      {onNew &&
+                        !workspaceComposition &&
+                        (!compose || !project.id) && (
+                          <IconButton
+                            size="compact"
+                            aria-label={`New chat in ${project.name}`}
+                            title="New chat"
+                            icon={<PlusIcon size={15} strokeWidth={2.5} />}
+                            onClick={() => onNew(project.id || undefined)}
+                          />
+                        )}
+                    </>
+                  )}
                 {!trailing?.hasInteractiveDecoration && newTask}
               </>
             }

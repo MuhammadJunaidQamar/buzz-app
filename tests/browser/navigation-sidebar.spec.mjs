@@ -166,7 +166,7 @@ test.describe("workspace heading resize", () => {
             heading.evaluate((row) => {
               const label = row
                 .querySelector("summary")
-                .getBoundingClientRect();
+                .firstElementChild.getBoundingClientRect();
               const control = row
                 .querySelector(".buzz-split-button")
                 .getBoundingClientRect();
@@ -407,7 +407,9 @@ creationSidebar(
     // one trailing inset before the row's edge; nothing floats over the title.
     const placement = await create.evaluate((button) => {
       const row = button.closest(".navigation-section-heading");
-      const title = row.querySelector("summary").getBoundingClientRect();
+      const title = row
+        .querySelector("summary")
+        .firstElementChild.getBoundingClientRect();
       const rowEnd = row.getBoundingClientRect().right;
       const { left, right } = button.getBoundingClientRect();
       return { afterTitle: left >= title.right - 0.5, inset: rowEnd - right };
