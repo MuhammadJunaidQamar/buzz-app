@@ -229,8 +229,7 @@ function ChannelSidebarItemCore({
         ) : undefined
       }
       menuAction={
-        menuEnabled &&
-        channel.channelType === "solo" && (
+        menuEnabled && (
           <MenuRoot
             open={menuOpen && present && actionsOpen}
             onOpenChange={(open) => {
@@ -250,7 +249,7 @@ function ChannelSidebarItemCore({
                   variant="bare"
                   size="compact"
                   aria-label={menuLabel}
-                  data-solo-row-action=""
+                  data-channel-row-action=""
                   icon={<DotsThreeIcon size={15} strokeWidth={2.5} />}
                 />
               )}

@@ -123,7 +123,7 @@ test("a unified Solo row describes and opens shared access", async ({
     generateSecretKey(),
   );
   const outer = page.locator("[data-channel-sidebar-row]").filter({ has: row });
-  const action = outer.locator("[data-solo-row-action]");
+  const action = outer.locator("[data-channel-row-action]");
   await expect(outer.locator("[data-channel-working]")).toBeVisible();
 
   const geometry = () =>
@@ -206,7 +206,9 @@ async function expectTrailingAlignment(row, status, touch = false) {
       async () => {
         const action = await row.evaluate((button) => {
           const outer = button.closest("[data-solo-menu-id]");
-          const menu = outer?.querySelector("[data-solo-row-action]");
+          const menu = outer?.querySelector(
+            "[data-solo-row-action], [data-channel-row-action]",
+          );
           const shared = outer?.querySelector("[data-solo-shared]");
           if (!menu) throw new Error("Missing Solo row action");
           const rect = (node) => {

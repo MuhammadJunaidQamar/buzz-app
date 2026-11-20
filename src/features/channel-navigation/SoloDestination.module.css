@@ -25,7 +25,7 @@
 .menu:is(
   :hover,
   [data-context-menu-present],
-  :has(:focus-visible),
+  html[data-keyboard-navigation] .menu:has(:focus-visible),
   :has([aria-expanded="true"][aria-haspopup="menu"])
 ):not(:has([aria-current="page"], [data-spring-loaded="on"]))::before {
   background: var(--affordance-panel-hover);
@@ -42,8 +42,8 @@
   display: none;
 }
 
-/* Menu activity reveals the overflow menu and swaps the source's Reveal content. */
-.menu [data-solo-row-action] {
+/* A nested destination owns its own hover and keyboard focus. */
+.menu > [data-solo-row-action] {
   width: var(--session-action-size);
   height: var(--session-action-size);
   margin: 0;
@@ -52,21 +52,37 @@
   opacity: 0;
 }
 @media (hover: hover) {
-  .menu [data-solo-row-action] {
+  .menu > [data-solo-row-action] {
+    position: absolute;
+    z-index: 1;
+    inset-inline-end: 0;
+    top: 50%;
+    transform: translateY(-50%);
     opacity: 0;
+    pointer-events: none;
+  }
+  .menu:is(
+      :hover:not(:has(.menu:hover)),
+      [data-context-menu-present],
+      html[data-keyboard-navigation]
+        .menu:has(:focus-visible):not(:has(.menu :focus-visible))
+    )
+    > [data-solo-row-action],
+  .menu > [data-solo-row-action][aria-expanded="true"] {
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 .menu:is(
   :hover,
   [data-context-menu-present],
-  :has(:focus-visible),
+  html[data-keyboard-navigation] .menu:has(:focus-visible),
   :has([aria-expanded="true"][aria-haspopup="menu"])
 ) {
   .rest {
     opacity: 0;
   }
-  .active,
-  [data-solo-row-action] {
+  .active {
     opacity: 1;
   }
 }

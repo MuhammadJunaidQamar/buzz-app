@@ -67,7 +67,7 @@ test("sidebar headings keep readable space and compact disclosure targets at enl
       else await resize.press(width === 220 ? "Home" : "End");
       await expect(resize).toHaveAttribute("aria-valuenow", String(width));
       // Measure at rest: the double-click leaves the pointer where a heading
-      // can land, and hovering reveals its actions, which take their width.
+      // can land and reveal its actions.
       await page.mouse.move(0, 0);
       for (const summary of summaries) {
         await summary.scrollIntoViewIfNeeded();
@@ -101,11 +101,12 @@ test("sidebar headings keep readable space and compact disclosure targets at enl
                   Math.abs(frame.height - disclosure.height) < 1 &&
                   frame.height <= 2.5 * root,
                 adjacent: Math.abs(chevron.left - label.right - gap) < 1,
-                // The trigger fills the label slot; actions follow it.
                 fullTarget:
                   disclosure.left === slot.left &&
                   disclosure.right === slot.right &&
-                  slot.right <= actions.left + 0.5,
+                  Math.abs(slot.right - frame.right) < 0.5 &&
+                  getComputedStyle(header.lastElementChild).pointerEvents ===
+                    "none",
                 actionsContained:
                   actions.left >= frame.left &&
                   actions.right <= frame.right + 1 &&
