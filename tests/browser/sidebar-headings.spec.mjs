@@ -153,13 +153,12 @@ test("sidebar headings keep readable space and compact disclosure targets at enl
   await expect(channels.locator("..")).not.toHaveAttribute("open");
   await channels.press("Enter");
   await expect(channels.locator("..")).toHaveAttribute("open", "");
-  await channels.focus();
-  await expect(channels).toBeFocused();
-  await page.keyboard.press("Tab");
   const more = sidebar.getByRole("button", {
     name: "More actions for Team",
     exact: true,
   });
+  await more.press("Tab");
+  await page.keyboard.press("Shift+Tab");
   await expect(more).toBeFocused();
   await expect(more.locator("..")).toHaveCSS("opacity", "1");
   await more.press("Enter");

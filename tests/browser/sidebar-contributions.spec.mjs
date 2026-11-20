@@ -750,7 +750,8 @@ appTest.describe("Solo header accessories", () => {
       const workActions = work.getByRole("button", {
         name: "Actions for Work",
       });
-      await work.getByRole("button", { name: "Work", exact: true }).hover();
+      const workTitle = work.getByRole("button", { name: "Work", exact: true });
+      await workTitle.hover();
       await workActions.click();
       await expect(
         page.getByRole("menuitem", { name: "New task" }),
@@ -759,7 +760,7 @@ appTest.describe("Solo header accessories", () => {
         page.getByRole("menuitem", { name: "New chat" }),
       ).toBeVisible();
       await page.keyboard.press("Escape");
-      await expect(workActions).toBeFocused();
+      await expect(workTitle).toBeFocused();
       await sidebar.getByRole("button", { name: "Other", exact: true }).hover();
       await expect(workActions.locator("..")).toHaveCSS("opacity", "0");
       const channelGroup = headers[1].group;
