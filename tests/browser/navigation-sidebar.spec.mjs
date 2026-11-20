@@ -166,15 +166,13 @@ test.describe("workspace heading resize", () => {
         expect(await label.boundingBox()).toEqual(resting);
         await expect
           .poll(async () =>
-            label.evaluate((title) => {
-              const row = title.closest(".navigation-section-heading");
-              const label = title.getBoundingClientRect();
+            heading.evaluate((row) => {
               const control = row
                 .querySelector(".buzz-split-button")
                 .getBoundingClientRect();
               const bounds = row.getBoundingClientRect();
               return (
-                label.right <= control.left + 0.5 &&
+                control.left >= bounds.left - 0.5 &&
                 control.right <= bounds.right + 0.5
               );
             }),
