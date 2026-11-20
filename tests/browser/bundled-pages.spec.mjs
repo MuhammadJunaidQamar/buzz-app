@@ -6,6 +6,23 @@ async function pageAction(page, article, name) {
   await page.getByRole("menuitem", { name, exact: true }).click();
 }
 
+async function expectDocumentAtBottom(article) {
+  const contents = article.getByRole("region", { name: "Doc contents" });
+  await expect(
+    article.getByRole("group", { name: "Document formatting" }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      contents.evaluate((region) =>
+        Math.abs(
+          region.getBoundingClientRect().bottom -
+            region.closest("article").getBoundingClientRect().bottom,
+        ),
+      ),
+    )
+    .toBeLessThanOrEqual(1);
+}
+
 // Browser boundary: plugin composition, native rich editing, mounted live delivery,
 // retained view state and responsive layout. Policy permutations live in Vitest.
 test("edits and preserves drafts using host UI, then adopts an agent revision without rewriting it", async ({
@@ -187,6 +204,7 @@ Unsaved source edit. Rich edit.`.trimEnd(),
       await expect(
         article.getByRole("button", { name: "Share doc", exact: true }),
       ).toBeInViewport({ ratio: 1 });
+      await expectDocumentAtBottom(article);
       await expect(
         body.getByRole("heading", { level: 1, name: "Agent update" }),
       ).toBeVisible();
@@ -252,6 +270,7 @@ test("opens a Page beside the conversation and preserves host history and live e
     exact: true,
   });
   await expect(article).toBeVisible();
+  await expectDocumentAtBottom(article);
   await expect(page.getByRole("textbox", { name: /message/i })).toBeVisible();
   const remote = "Updated through the agent tool beside the conversation.";
   await page.evaluate(
