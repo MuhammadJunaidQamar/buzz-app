@@ -1,5 +1,11 @@
 import { Button } from "../../shared/design-system/ui/Button";
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { RelaySession } from "../relay/session";
 import type { EventData } from "../relay/events";
 import type { ComposerTool, ContributionReader } from "./contracts";
@@ -133,10 +139,32 @@ export function reactionTarget(event: Pick<EventData, "kind" | "tags">) {
 }
 
 /** The relay refuses a signed event after 15 minutes, so an older update is
- * sent again as a new event for the same reaction. */
-async function retryReaction(outbox: Outbox, item: OutgoingEvent) {
-  const { id, kind, content, tags, created_at } = item.event;
+ * sent again as a new event for the same reaction. An unconfirmed one may have
+ * reached the relay, which a read by ID settles before anything is sent. */
+async function retryReaction(session: RelaySession, item: OutgoingEvent) {
+  const { outbox } = session;
+  const { id, kind, pubkey, content, tags, created_at } = item.event;
+  if (!outbox) return;
   if (Date.now() / 1000 - created_at < 15 * 60) return outbox.retry(id);
+  if (item.delivery === "unknown") {
+    const found = await session.readRemote(
+      [
+        {
+          kinds: [kind],
+          ids: [id],
+          authors: [pubkey],
+          limit: 1,
+          consistency: "strong",
+        },
+      ],
+      { priority: "foreground" },
+    );
+    if (found.some((event) => event.id === id)) {
+      if (outbox.snapshot().some((saved) => saved.event.id === id))
+        await outbox.dismiss(id);
+      return;
+    }
+  }
   outbox.send({
     kind,
     content,
@@ -144,6 +172,11 @@ async function retryReaction(outbox: Outbox, item: OutgoingEvent) {
   });
   await outbox.dismiss(id);
 }
+
+/** The relay already has this reaction, so nothing is left to deliver. */
+const alreadyThere = (item: OutgoingEvent) =>
+  item.delivery === "failed" &&
+  /reaction already exists/i.test(item.error ?? "");
 
 export function ReactionDelivery({
   session,
@@ -167,7 +200,7 @@ export function ReactionDelivery({
     setRetrying(true);
     setError(undefined);
     try {
-      await retryReaction(outbox, item);
+      await retryReaction(session, item);
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -179,10 +212,16 @@ export function ReactionDelivery({
       setRetrying(false);
     }
   };
-  const operation = operations.find(
+  const ours = operations.filter(
+    (item) => session.messages.reactionTarget(item.event) === messageId,
+  );
+  const duplicate = ours.find(alreadyThere)?.event.id;
+  useEffect(() => {
+    if (duplicate) outbox?.dismiss(duplicate).catch(() => {});
+  }, [duplicate, outbox]);
+  const operation = ours.find(
     (item) =>
-      ["failed", "unknown"].includes(item.delivery) &&
-      session.messages.reactionTarget(item.event) === messageId,
+      ["failed", "unknown"].includes(item.delivery) && !alreadyThere(item),
   );
   if (!operation) return null;
   return (
