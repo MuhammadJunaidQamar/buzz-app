@@ -640,7 +640,7 @@ export function SearchResults({
     session,
     needsPublicLookup ? operatorChannel : "",
     list.status === "ready",
-    true,
+    "exact",
   );
   const operatorLookupPending =
     needsPublicLookup &&
@@ -1045,6 +1045,8 @@ export function SearchResults({
     session,
     scopedChannelId || hasOperator || offline ? "" : parsed.text,
     list.status === "ready",
+    // Command-K shows names found word by word; `#` completion does not ask.
+    "terms",
   );
   // Scoped search passes no text, so the lookup is idle there.
   const slowChannels = useDelayedSearch(publicChannels.loading);
