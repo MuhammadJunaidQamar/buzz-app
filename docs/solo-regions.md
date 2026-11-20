@@ -239,7 +239,9 @@ never part of the signed message.
 ## Header accessories
 
 When `ui.headerMenuActions === true`, pass `headerMenuActions` to
-`ui.Workspace` or `ui.ChannelGroup` to add entries to the existing Actions menu.
+`ui.Workspace` or `ui.ChannelGroup` to add entries to the existing Actions menu
+in Solo. A channel group rendered inside a Team channel row uses the Team
+channel menu.
 Each entry has a unique `id`, a `label`, and an `onSelect` callback. The callback
 can return a promise. The host reports callback failures in the region heading.
 
