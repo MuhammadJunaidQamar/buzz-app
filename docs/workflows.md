@@ -111,9 +111,10 @@ See the [capability contract](../src/features/workflows/types.ts).
   itself and answers the visit by the same rule: on a partial list the visit
   stays unanswered, and once a later page lists a channel the landing takes
   the visit. The page holds the one notice for a visit, whichever of the two
-  reports the workflow missing: it stays while later channels are read,
+  reports the workflow missing, and holds it above the content a reconnect
+  rebuilds: it stays while later channels are read and through a reconnect,
   goes only when the workflow opens, and is not raised again once the
-  reader dismisses it. The notice is shown once per
+  reader dismisses it, on that connection or a later one. The notice is shown once per
   visit and says the workflow was not found and may have been deleted. It
   does not say why: the workflow may be gone or in a channel the viewer
   cannot read, but the landing also reads fewer channels than the
@@ -292,7 +293,8 @@ and no definition read, then Workflows enabled, the action, the linked
 workflow and Back), with no relay that sends `buzz:workflow-id`. The routed
 page's channel-list states (loading, awaiting metadata, partial with a later
 page, empty, partial and empty with a later page, with and without the
-notice dismissed, a reconnect) are driven
+notice dismissed, a reconnect, a reconnect with the notice shown and with it
+dismissed) are driven
 through a test double of the session's
 channel list, not through the channel store. The start from a saved channel
 list runs the page over the real session and store, in jsdom against a relay
