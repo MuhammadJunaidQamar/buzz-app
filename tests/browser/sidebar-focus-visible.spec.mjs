@@ -88,6 +88,7 @@ test("closing a heading's dialog with the mouse leaves its menu button visible",
 }) => {
   await page.goto(app.origin);
   await openPage(page, "Messages");
+  await page.locator('summary[aria-label="Work"]').hover();
   const more = page.getByRole("button", { name: "More actions for Work" });
   await more.click();
   await page.getByRole("menuitem", { name: "Workspace settings" }).click();
