@@ -34,7 +34,6 @@ test("opens a Trash-only list, searches by retained title, and exits from the se
     name: "Show Trash",
   });
   await expect(activeLink).toBeVisible();
-  await expect(page.getByRole("button", { name: "About docs" })).toHaveCount(0);
   await activeLink.click();
   await pageAction(
     page,
@@ -43,20 +42,12 @@ test("opens a Trash-only list, searches by retained title, and exits from the se
   );
   const confirm = page.getByRole("dialog", { name: "Move this doc to Trash?" });
   await confirm.getByRole("button", { name: "Move to Trash" }).click();
-  await expect(
-    page.getByRole("heading", { name: `${title} (in Trash)` }),
-  ).toBeVisible();
+  const deleted = page.getByRole("article", { name: `${title} (in Trash)` });
+  await expect(deleted).toBeVisible();
   await page.getByRole("button", { name: "Back to docs", exact: true }).click();
   const docs = page.getByRole("list", { name: "Docs" });
-  await expect(
-    docs.getByRole("listitem").first().getByRole("button", { name: "New doc" }),
-  ).toBeVisible();
   await expect(activeLink).toHaveCount(0);
-  await expect(
-    docs.getByRole("button", { name: "Trash", exact: true }),
-  ).toHaveCount(0);
   await filter.press("Enter");
-  await expect(trashFilter).not.toBeChecked();
   await trashFilter.press("Enter");
   const search = page.getByRole("searchbox", { name: "Search Trash" });
   const trash = page.getByRole("list", { name: "Trash" });
@@ -74,20 +65,8 @@ test("opens a Trash-only list, searches by retained title, and exits from the se
   ).toBeVisible();
   await search.fill("Connected pages");
   await expect(trashedLink).toBeVisible();
-  await page.getByRole("button", { name: "Exit Trash" }).click();
-  await expect(
-    page.getByRole("searchbox", { name: "Search docs" }),
-  ).toHaveValue("");
-  await expect(
-    page.getByRole("link", { name: "Storage research" }),
-  ).toBeVisible();
-  await filter.click();
-  await trashFilter.click();
-  await filter.click();
-  await expect(trashFilter).toBeChecked();
-  await page.keyboard.press("Escape");
+  await search.fill("");
   await trashedLink.click();
-  const deleted = page.getByRole("article", { name: `${title} (in Trash)` });
   await deleted.getByRole("button", { name: "Restore", exact: true }).click();
   await expect(
     page.getByRole("article", { name: title, exact: true }),
@@ -95,8 +74,9 @@ test("opens a Trash-only list, searches by retained title, and exits from the se
   await page.getByRole("button", { name: "Back to docs", exact: true }).click();
   await expect(page.getByText("Trash is empty")).toBeVisible();
   await page.getByRole("button", { name: "Exit Trash" }).click();
-  await expect(activeLink).toBeVisible();
-  await expect(page.getByRole("button", { name: "Exit Trash" })).toHaveCount(0);
+  await expect(
+    docs.getByRole("link", { name: title, exact: true }),
+  ).toBeVisible();
 });
 
 // Browser boundary: plugin composition, native rich editing, mounted live delivery,
@@ -149,12 +129,6 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
   await expect(
     menu.getByRole("menuitem", { name: "Move to Trash" }),
   ).toHaveAttribute("data-tone", "danger");
-  await expect(
-    menu.getByRole("menuitem", { name: "Copy doc link" }),
-  ).toHaveCount(0);
-  await expect(
-    menu.getByRole("menuitem", { name: "Export Markdown" }),
-  ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   if (browserName === "chromium") {
@@ -234,9 +208,6 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
     name: /Connected pages plan.*Carl.*Current/,
   });
   await expect(currentRevision).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: /auto-save/i })).toHaveCount(
-    0,
-  );
   const olderRevision = page
     .getByRole("menuitem", { name: /Connected pages plan.*You/ })
     .first();

@@ -131,6 +131,9 @@ it("lists all readable docs together with last-editor attribution and searches a
 
   render(<WorkingNotesCommunity workspace={f.workspace} />);
   const list = within(await screen.findByRole("list", { name: "Docs" }));
+  expect(list.getAllByRole("listitem")[0]).toContainElement(
+    list.getByRole("button", { name: "New doc" }),
+  );
   await within(await list.findByRole("link", { name: mine.title })).findByTitle(
     "Last edited by Carl",
   );
