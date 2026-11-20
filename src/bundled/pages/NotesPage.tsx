@@ -220,7 +220,16 @@ export function NotesPage({
                   </MenuRoot>
                 }
               />
-              {error && <p role="alert">{error}</p>}
+              {error && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <p role="alert" className="m-0">
+                    {error}
+                  </p>
+                  <Button size="sm" variant="subtle" onClick={refresh}>
+                    Try again
+                  </Button>
+                </div>
+              )}
               <LoadingRegion
                 pending={loading}
                 statusVisibility={

@@ -46,6 +46,36 @@ it.each([false, true])(
   },
 );
 
+it("recovers from a cancelled read and offers an inline retry after a failure", async () => {
+  const f = await workspaceFixture();
+  f.seed("Research plan", "Body");
+  const request = vi
+    .spyOn(f.workspace, "list")
+    .mockRejectedValueOnce(
+      new DOMException("Relay read cancelled", "AbortError"),
+    )
+    .mockRejectedValueOnce(new Error("Relay unavailable"));
+  vi.spyOn(Math, "random").mockReturnValue(0);
+  vi.useFakeTimers();
+  render(<WorkingNotesCommunity workspace={f.workspace} />);
+
+  await advance(499);
+  expect(request).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  await advance(1);
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole("alert")).toHaveTextContent("Relay unavailable");
+  expect(screen.queryByText("No docs yet")).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  await act(async () => {
+    await request.mock.results.at(-1)?.value;
+  });
+  expect(request).toHaveBeenCalledTimes(3);
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Research plan" })).toBeVisible();
+});
+
 it("lists all readable docs together with last-editor attribution and searches across creators", async () => {
   const f = await workspaceFixture();
   const mine = f.seed("My plan", "Updated by my agent");

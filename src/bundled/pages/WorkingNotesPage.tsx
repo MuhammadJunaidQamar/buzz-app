@@ -101,25 +101,23 @@ export function WorkingNotesPage({
   }, [request, connection]);
   if (connection.status !== "ready")
     return (
-      <Panel>
+      <Panel aria-label="Docs" aria-busy={connection.status === "connecting"}>
         <PanelHeader
           title={
             <PanelHeaderLabel title="Docs" icon={<NoteIcon size={16} />} />
           }
         />
-        <div className={styles.browser}>
-          <p role="status">
-            {connection.status === "connecting"
-              ? "Connecting to working docs…"
-              : "Connect to your community to open docs."}
-          </p>
-          {connection.status === "error" && (
-            <>
-              <p role="alert">{connection.error}</p>
-              <Button onClick={() => relay.retry()}>Retry connection</Button>
-            </>
-          )}
-        </div>
+        {connection.status !== "connecting" && (
+          <div className={styles.browser}>
+            <p>Connect to your community to open docs.</p>
+            {connection.status === "error" && (
+              <>
+                <p role="alert">{connection.error}</p>
+                <Button onClick={() => relay.retry()}>Retry connection</Button>
+              </>
+            )}
+          </div>
+        )}
       </Panel>
     );
   const route =

@@ -5,8 +5,17 @@ import {
   useRef,
   useState,
 } from "react";
+import { readErrorKind } from "../../features/relay/errors";
+import { retryRead } from "../../features/relay/read-retry";
 import { noteKey, noteTag, type Note } from "./model";
 import type { NotesPage, NotesWorkspace } from "./workspace";
+
+function cancelledRead(error: unknown) {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    readErrorKind(error) === "cancelled"
+  );
+}
 
 /** The Docs browser retains only the loaded, currently readable catalogue. */
 export function useNotesCollection(workspace: NotesWorkspace) {
@@ -74,18 +83,26 @@ export function useNotesCollection(workspace: NotesWorkspace) {
       setLoading(true);
       setError("");
       try {
-        const page = await workspace.list(
-          more ? current.current.cursor : undefined,
+        const page = await retryRead(
+          async (signal) => {
+            const result = await workspace.list(
+              more ? current.current.cursor : undefined,
+              signal,
+            );
+            // Discovery does not populate hidden-channel routes. Resolve this
+            // page in one batch before retaining or following any content.
+            const ids = [...new Set(result.notes.map((note) => note.channel))];
+            if (ids.length)
+              await workspace.session.channels.resolve?.(ids, {
+                signal,
+                consistency: "strong",
+              });
+            return result;
+          },
           controller.signal,
+          // Rosters and reconnects can retire a read while this view is still active.
+          cancelledRead,
         );
-        // Discovery reads do not populate the host's hidden-channel routes.
-        // Resolve this page in one batch before retaining/following its content.
-        const ids = [...new Set(page.notes.map((note) => note.channel))];
-        if (ids.length)
-          await workspace.session.channels.resolve?.(ids, {
-            signal: controller.signal,
-            consistency: "strong",
-          });
         controller.signal.throwIfAborted();
         page.notes = page.notes.filter(
           (note) => !!workspace.session.channels.get?.(note.channel),
@@ -107,7 +124,11 @@ export function useNotesCollection(workspace: NotesWorkspace) {
       } catch (error) {
         if (!controller.signal.aborted)
           setError(
-            error instanceof Error ? error.message : "Docs could not be read.",
+            cancelledRead(error)
+              ? "Loading docs was interrupted."
+              : error instanceof Error
+                ? error.message
+                : "Docs could not be read.",
           );
       } finally {
         if (!controller.signal.aborted) setLoading(false);
