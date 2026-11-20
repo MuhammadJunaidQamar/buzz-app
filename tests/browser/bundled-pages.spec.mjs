@@ -253,6 +253,56 @@ Unsaved source edit. Rich edit.`.trimEnd(),
 
 // Browser boundary: the real conversation link dispatcher must retain the
 // composer and use the existing addressable panel Back/Forward/Close owner.
+test("keeps the document scroll position when switching modes after reopening", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/bundled-pages.html");
+  const link = page.getByRole("link", {
+    name: "Connected pages plan",
+    exact: true,
+  });
+  await expect(link).toBeVisible();
+  await page.evaluate(() => {
+    const fixture = window.workingNotesFixture;
+    const markdown = Array.from(
+      { length: 28 },
+      (_, i) => `Paragraph ${i + 1} of the working plan.`,
+    ).join("\n\n");
+    return fixture.agentEdit(fixture.plan, markdown);
+  });
+  await link.click();
+  const article = page.getByRole("article", { name: "Connected pages plan" });
+  const contents = article.getByRole("region", { name: "Doc contents" });
+  const mode = article.getByRole("combobox", { name: "Doc mode" });
+  const toolbar = article.getByRole("group", { name: "Document formatting" });
+  const body = article.getByRole("textbox", { name: "Doc body" });
+  await expect(toolbar).toBeVisible();
+  await expect(body).toContainText("Paragraph 28");
+  await mode.click();
+  await page.getByRole("option", { name: "Viewing", exact: true }).click();
+  await expect(mode).toHaveText("Viewing");
+  await expect(toolbar).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Back to docs" }).click();
+  await expect(link).toBeVisible();
+  await page.goBack();
+  await expect(mode).toHaveText("Viewing");
+  await contents.evaluate((region) => {
+    region.scrollTop = 64;
+  });
+  await mode.click();
+  await page.getByRole("option", { name: "Editing", exact: true }).click();
+  await expect(toolbar).toBeVisible();
+  await expect(mode).toHaveText("Editing");
+  await expect(body).not.toBeFocused();
+  await expect(contents).toHaveJSProperty("scrollTop", 64);
+
+  await mode.click();
+  await page.getByRole("option", { name: "Viewing", exact: true }).click();
+  await expect(mode).toHaveText("Viewing");
+  await expect(contents).toHaveJSProperty("scrollTop", 64);
+});
+
 test("opens a Page beside the conversation and preserves host history and live edits", async ({
   page,
 }) => {

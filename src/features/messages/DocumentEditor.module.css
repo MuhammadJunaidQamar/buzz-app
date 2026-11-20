@@ -24,7 +24,6 @@
 }
 .editorToolbar {
   @apply popover-surface;
-  --floating-radius: var(--radius-row);
   position: absolute;
   inset-block-end: 0;
   inline-size: max-content;

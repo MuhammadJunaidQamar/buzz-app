@@ -132,15 +132,15 @@ export function NoteDocument({
     cachedDraft?.restoreFrom,
   );
   const dirty = !!note && hasEdits(note, { title, markdown });
+  const wantsEditing = view ? (view.edit ?? true) : localEditing;
   const editing =
-    (view ? (view.edit ?? true) : localEditing) &&
-    ((canEdit && !note?.deleted) || dirty || !!restoreFrom);
+    wantsEditing && ((canEdit && !note?.deleted) || dirty || !!restoreFrom);
   const [localDialog, setLocalDialog] = useState<
     "share" | "history" | "link" | "delete" | undefined
   >();
   const dialog = active ? (view ? view.dialog : localDialog) : undefined;
   useLayoutEffect(() => {
-    if (dialog) {
+    if (dialog || !wantsEditing) {
       needsFocus.current = false;
       pendingFocus.current = undefined;
       return;
@@ -178,7 +178,7 @@ export function NoteDocument({
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [active, busy, unavailable, note, canEdit, editing, dialog]);
+  }, [active, busy, unavailable, note, canEdit, editing, dialog, wantsEditing]);
   const presentation = useRef({ view, onViewChange, editing });
   presentation.current = { view, onViewChange, editing };
   const setEditing = useCallback((edit: boolean) => {
@@ -896,11 +896,7 @@ export function NoteDocument({
           </Dialog>
         )}
       </section>
-      <div
-        ref={setToolbarTarget}
-        className={styles.editorDock}
-        hidden={!editing || source}
-      />
+      <div ref={setToolbarTarget} className={styles.editorDock} />
     </article>
   );
 }

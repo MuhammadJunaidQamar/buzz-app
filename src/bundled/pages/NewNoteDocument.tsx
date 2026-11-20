@@ -304,11 +304,7 @@ export function NewNoteDocument({
           </NoteEditor>
         </div>
       </section>
-      <div
-        ref={setToolbarTarget}
-        className={styles.editorDock}
-        hidden={source}
-      />
+      <div ref={setToolbarTarget} className={styles.editorDock} />
     </article>
   );
 }
