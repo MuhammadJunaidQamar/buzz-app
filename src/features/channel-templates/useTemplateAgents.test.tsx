@@ -2,9 +2,10 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { createRelaySession } from "../relay/session";
-import { keypair, signed } from "../relay/testing";
+import { keypair, signed, scriptedTransport } from "../relay/testing";
 import type { LiveCallbacks } from "../relay/live";
 import { localAgentsFixture } from "../agents/local-testing";
+import { useMentionArchives } from "../messages/use-mention-archives";
 import { useTemplateAgents } from "./useTemplateAgents";
 
 afterEach(cleanup);
@@ -67,3 +68,75 @@ it("finishes template archive checks over HTTP during a socket-only outage", asy
     act(() => owner.dispose());
   }
 });
+
+it.each(["mention", "template"] as const)(
+  "%s demand joins a loading sidebar read before a socket drop",
+  async (consumer) => {
+    const viewer = keypair(),
+      relay = keypair(),
+      agent = keypair();
+    const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
+    const query = vi.fn(wire.transport.query);
+    let live!: LiveCallbacks;
+    const owner = createRelaySession(
+      {
+        ...wire.transport,
+        query,
+        scope: "https://relay.example.test",
+        archiveAuthority: relay.pubkey,
+        subscribe(callbacks) {
+          live = callbacks;
+          return { update() {}, retry() {}, dispose() {} };
+        },
+      },
+      {
+        agentChoices: localAgentsFixture([
+          {
+            pubkey: agent.pubkey,
+            name: "Template agent",
+            relayUrl: "wss://relay.example.test",
+            owner: viewer.pubkey,
+          },
+        ]),
+      },
+    );
+    const template = {
+      id: "template",
+      name: "Template",
+      agents: [agent.pubkey],
+      teams: [],
+      canvas: "",
+    };
+    try {
+      live.state({ status: "connected", routes: [] });
+      const background = owner.session.archives.ensure({ background: true });
+      const request = wire.next();
+      const { result } = renderHook(() => {
+        const archives = useMentionArchives(
+          owner.session,
+          consumer === "mention",
+        );
+        const agents = useTemplateAgents(
+          owner.session,
+          consumer === "template" ? template : undefined,
+        );
+        return consumer === "mention"
+          ? archives.status === "ready"
+          : !agents.pending && agents.agents.includes(agent.pubkey);
+      });
+      act(() => live.state({ status: "retrying", routes: [] }));
+      expect(request.signal?.aborted).toBe(false);
+      await act(async () => {
+        request.respond([
+          signed(relay, { kind: 13535, content: "", tags: [["-"]] }),
+        ]);
+        await background;
+      });
+      await waitFor(() => expect(result.current).toBe(true));
+      expect(query).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup();
+      act(() => owner.dispose());
+    }
+  },
+);

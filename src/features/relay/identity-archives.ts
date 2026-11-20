@@ -101,6 +101,10 @@ export function createIdentityArchives(
     // An active consumer can join an automatic read and keep it across a drop.
     if (!background) backgroundRead = false;
     if (pending) return pending;
+    if (background && (paused || Date.now() < (snapshot.retryAt ?? 0))) {
+      demanded = true;
+      return Promise.resolve();
+    }
     backgroundRead = background;
     const owned = new AbortController();
     controller = owned;
@@ -346,6 +350,9 @@ export function createIdentityArchives(
    * caller/lifetime cancellation and do not depend on the live socket. */
   function stale() {
     stopRead();
+    // Socket changes cannot shorten the relay's admission delay. Keep the
+    // failure visible to the existing recovery owner until it may retry.
+    if (snapshot.retryAt !== undefined) return;
     const { error: _, transient: __, retryAt: ___, ...known } = snapshot;
     publish({
       ...known,
@@ -379,9 +386,12 @@ export function createIdentityArchives(
     }),
     clear,
     stale,
+    // Automatic recovery keeps the failed read's demand, unlike manual Refresh.
+    retry: () => refresh(backgroundRead),
     connected(value: boolean) {
       paused = !value;
       if (!value) {
+        if (pending && backgroundRead) demanded = true;
         if (!pending || backgroundRead) stale();
       } else {
         if (snapshot.status === "error") stale();

@@ -1319,10 +1319,13 @@ Explicit cache clear and session disposal discard it and cancel work. Disconnect
 retires background snapshot reads while retaining known visibility. Active reads,
 archive actions and their confirmation use HTTP or native IPC independently of
 the live socket. Only background sidebar demand waits for connection recovery,
-which resumes recorded demand once. First connection
-preserves a pending or successful startup read and retries a failed one.
+which resumes recorded demand once. Recovery retries preserve the original
+background or active demand; an active consumer can join a loading sidebar read
+and keep it alive across a socket drop. First connection preserves a pending or
+successful startup read and retries a failed one.
 Transient failures also join the session's existing capped recovery backoff,
-respecting relay admission delays. Invalid snapshots and access refusals wait
+respecting relay admission delays across socket loss, reconnect and first connect.
+Invalid snapshots and access refusals wait
 for an explicit refresh or connection change.
 No periodic poll, event-union seeding or history filtering is added.
 

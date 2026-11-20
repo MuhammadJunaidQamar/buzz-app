@@ -114,6 +114,75 @@ it("session recovery respects archive admission delays and stops after success",
   await vi.advanceTimersByTimeAsync(120_000);
   expect(h.query).toHaveBeenCalledTimes(count);
 });
+it.each(["sidebar", "active"] as const)(
+  "keeps %s recovery demand through a socket drop",
+  async (demand) => {
+    const background = demand === "sidebar";
+    vi.useFakeTimers();
+    const h = harness();
+    h.live.state({ status: "connected", routes: [] });
+    const initial = h.archives.ensure({ background });
+    for (let attempt = 0; attempt < 4; attempt++) {
+      h.wire.next().fail(new ReadError("unavailable", "offline", 503));
+      if (attempt < 3) await vi.advanceTimersToNextTimerAsync();
+    }
+    await initial;
+    expect(h.archives.snapshot()).toMatchObject({
+      status: "error",
+      transient: true,
+    });
+    await vi.advanceTimersToNextTimerAsync();
+    const retry = h.wire.next();
+    expect(h.query).toHaveBeenCalledTimes(5);
+    h.live.state({ status: "retrying", routes: [] });
+    expect(retry.signal?.aborted).toBe(background);
+    if (!background) {
+      retry.respond([snapshot()]);
+      await h.archives.ensure();
+      expect(h.archives.snapshot().status).toBe("ready");
+      expect(h.query).toHaveBeenCalledTimes(5);
+      return;
+    }
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(h.query).toHaveBeenCalledTimes(5);
+    h.live.state({ status: "connected", routes: [] });
+    const resumed = h.wire.next();
+    expect(h.query).toHaveBeenCalledTimes(6);
+    resumed.respond([snapshot()]);
+    await h.archives.ensure();
+    expect(h.archives.snapshot().status).toBe("ready");
+  },
+);
+it.each(["startup", "reconnect"] as const)(
+  "keeps an archive admission deadline through socket flaps after %s",
+  async (phase) => {
+    vi.useFakeTimers();
+    const h = harness();
+    if (phase === "reconnect")
+      h.live.state({ status: "connected", routes: [] });
+    const first = h.archives.ensure({ background: true });
+    h.wire.next().fail(new ReadError("unavailable", "quota", 429, 60_000));
+    await first;
+    const deadline = Date.now() + 60_000;
+    for (let flap = 0; flap < 4; flap++) {
+      h.live.state({ status: "retrying", routes: [] });
+      h.live.state({ status: "connected", routes: [] });
+      void h.archives.ensure({ background: true });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(h.archives.snapshot().retryAt).toBe(deadline);
+      expect(h.query).toHaveBeenCalledTimes(1);
+    }
+    await vi.advanceTimersByTimeAsync(19_999);
+    expect(h.query).toHaveBeenCalledTimes(1);
+    for (let tick = 0; tick < 10 && !h.wire.pending.length; tick++)
+      await vi.advanceTimersToNextTimerAsync();
+    expect(Date.now()).toBeGreaterThanOrEqual(deadline);
+    const retry = h.wire.next();
+    retry.respond([snapshot()]);
+    await h.archives.ensure();
+    expect(h.archives.snapshot().status).toBe("ready");
+  },
+);
 it.each([null, "invalid"])(
   "does not infer archive authority from relayAuthor (%s)",
   async (authority) => {
