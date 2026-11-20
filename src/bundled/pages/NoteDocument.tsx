@@ -10,14 +10,14 @@ import {
   NoteConflict,
   noteKey,
   noteTag,
-  noteUrl,
   type Note,
   type NoteAddress,
 } from "./model";
 import type { NotesWorkspace } from "./workspace";
+import { useLiveUpdatesInterrupted } from "./live-updates";
 import { useIdentityNames } from "../../features/identity-names/react";
+import { isTransientFailure } from "../../features/relay/errors";
 import { avatarMedia } from "../../shared/avatar-source";
-import { writeClipboardText } from "../../shared/clipboard";
 import { formatPublicKey } from "../../shared/identity/public-key";
 import {
   ArrowsClockwiseIcon,
@@ -38,7 +38,11 @@ import { Select } from "../../shared/design-system/ui/Select";
 import { NoteHistory, NoteHistoryMenu, NoteSharing } from "./NoteDialogs";
 import { NoteEditor, type NoteEditorHandle } from "./NoteEditor";
 import { NoteSaveAction } from "./NoteSaveAction";
-import { NoteByline, NoteBylinePlaceholder } from "./NoteMetadata";
+import {
+  NoteByline,
+  NoteBylinePlaceholder,
+  noteDisplayTitle,
+} from "./NoteMetadata";
 import { NoteTitle } from "./NoteTitle";
 import readerStyles from "./NotesPage.module.css";
 import { NoteMarkdown } from "./NoteMarkdown";
@@ -105,6 +109,11 @@ export function NoteDocument({
   const [canEdit, setCanEdit] = useState(false);
   const [blocking, setBlocking] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [needsRefresh, setNeedsRefresh] = useState(false);
+  const liveInterrupted = useLiveUpdatesInterrupted(
+    workspace.session.live,
+    (channel) => channel === address.channel,
+  );
   const busy = blocking || refreshing;
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -125,8 +134,10 @@ export function NoteDocument({
     null,
   );
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
   const [unavailable, setUnavailable] = useState(!!cachedDraft);
+  const [retained, setRetained] = useState<Note>();
+  const [retainedReadFailed, setRetainedReadFailed] = useState(false);
+  const [retainedAttempt, setRetainedAttempt] = useState(0);
   const [conflict, setConflict] = useState<Note>();
   const [restoreFrom, setRestoreFrom] = useState<Note | undefined>(
     cachedDraft?.restoreFrom,
@@ -240,6 +251,15 @@ export function NoteDocument({
     return () => window.removeEventListener("beforeunload", prevent);
   }, [dirty]);
   const adopt = useCallback((next: Note) => {
+    const previous = latest.current.note;
+    setRetained(
+      next.deleted &&
+        previous &&
+        !previous.deleted &&
+        previous.revision === noteTag(next.event, "prev")
+        ? previous
+        : undefined,
+    );
     setNote(next);
     setTitle(next.title);
     setMarkdown(next.markdown);
@@ -252,9 +272,11 @@ export function NoteDocument({
     async ({
       signal,
       background,
+      revoked,
     }: {
       signal?: AbortSignal;
       background?: boolean;
+      revoked?: boolean;
     } = {}) => {
       // A local revision may echo before its save receipt. Reconcile after the
       // transaction settles so our own write cannot conflict with its draft.
@@ -270,6 +292,7 @@ export function NoteDocument({
         const current = await workspace.open(address, signal);
         const roles = await workspace.authority(current.channel, signal);
         signal?.throwIfAborted();
+        setNeedsRefresh(false);
         setUnavailable(false);
         setCanEdit(
           ["owner", "admin", "member", "bot"].includes(
@@ -288,6 +311,14 @@ export function NoteDocument({
         callbacks.current.onChange(current);
       } catch (error) {
         if (!signal?.aborted) {
+          setNeedsRefresh(true);
+          if (
+            !revoked &&
+            latest.current.note &&
+            !latest.current.unavailable &&
+            isTransientFailure(error)
+          )
+            return;
           setError(errorText(error));
           setCanEdit(false);
           setUnavailable(true);
@@ -318,38 +349,33 @@ export function NoteDocument({
       if (known) void refresh({ background: true });
     });
   }, [workspace, address, refresh]);
-  const [deletedPreview, setDeletedPreview] = useState<Note>();
-  const [previewError, setPreviewError] = useState("");
-  const currentRevision = note?.revision;
+  const deletedParent =
+    !unavailable && note?.deleted ? noteTag(note.event, "prev") : undefined;
+  const retainedVersion =
+    deletedParent && retained?.revision === deletedParent
+      ? retained
+      : undefined;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Refresh explicitly retries the restore-source read.
   useEffect(() => {
-    setDeletedPreview(undefined);
-    setPreviewError("");
-    if (!currentRevision || !note?.deleted || unavailable) return;
+    setRetainedReadFailed(false);
+    if (!deletedParent || retainedVersion) return;
     const controller = new AbortController();
-    void (async () => {
-      try {
-        let offset = 0;
-        while (true) {
-          const page = await workspace.history(
-            address,
-            offset,
-            controller.signal,
-          );
-          controller.signal.throwIfAborted();
-          const revision = page.revisions.find((entry) => !entry.deleted);
-          if (revision) {
-            setDeletedPreview(revision);
-            return;
-          }
-          if (!page.more) return;
-          offset += page.revisions.length;
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) setPreviewError(errorText(error));
-      }
-    })();
+    void workspace
+      .history(address, 0, controller.signal)
+      .then(({ revisions }) => {
+        controller.signal.throwIfAborted();
+        setRetained(
+          revisions.find(
+            (revision) =>
+              revision.revision === deletedParent && !revision.deleted,
+          ),
+        );
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setRetainedReadFailed(true);
+      });
     return () => controller.abort();
-  }, [workspace, address, currentRevision, note?.deleted, unavailable]);
+  }, [workspace, address, deletedParent, retainedVersion, retainedAttempt]);
   const profiles = useSyncExternalStore(
     workspace.session.profiles.subscribe,
     workspace.session.profiles.snapshot,
@@ -379,7 +405,7 @@ export function NoteDocument({
         },
         () => {
           callbacks.current.onUnavailable(address);
-          void refresh({ background: true });
+          void refresh({ background: true, revoked: true });
         },
       ),
     [workspace, address, refresh],
@@ -387,7 +413,6 @@ export function NoteDocument({
   const run = async (action: () => Promise<void>) => {
     setBlocking(true);
     setError("");
-    setStatus("");
     try {
       await action();
     } catch (error) {
@@ -420,7 +445,6 @@ export function NoteDocument({
       setSaving(true);
       if (revision) setBlocking(true);
       setSaveError("");
-      setStatus("");
       try {
         const next = await workspace.save(
           base,
@@ -443,7 +467,6 @@ export function NoteDocument({
           };
           adopt(next);
           setDialog(undefined);
-          setStatus("Saved");
           return;
         }
         // Advance the accepted base without replacing edits made in flight.
@@ -455,7 +478,6 @@ export function NoteDocument({
         setNote(next);
         setRestoreFrom(undefined);
         callbacks.current.onChange(next);
-        setStatus("Saved");
       } catch (error) {
         if (request.signal.aborted) return;
         if (error instanceof NoteConflict) setConflict(error.current);
@@ -507,13 +529,12 @@ export function NoteDocument({
     markdown,
     save,
   ]);
-  const copyLink = () => {
-    void run(async () => {
-      await writeClipboardText(noteUrl(address, community));
-      setStatus("Doc link copied");
-    });
-  };
   const loading = busy && (!note || unavailable);
+  const displayTitle = note && noteDisplayTitle(note, retainedVersion?.title);
+  const showRefresh =
+    needsRefresh ||
+    retainedReadFailed ||
+    (!!note && !unavailable && liveInterrupted);
   const shareButton = (
     <IconButton
       ref={shareTrigger}
@@ -537,11 +558,7 @@ export function NoteDocument({
     <article
       className={styles.documentPane}
       aria-label={
-        !unavailable && note
-          ? (deletedPreview?.title ?? note.title)
-          : loading
-            ? "Loading doc"
-            : "Doc"
+        !unavailable && note ? displayTitle : loading ? "Loading doc" : "Doc"
       }
     >
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: blank-space clicks extend the existing textbox hit area; keyboard users reach that textbox with Tab. */}
@@ -600,9 +617,7 @@ export function NoteDocument({
           />
         ) : (
           <h2 className="text-heading">
-            {!unavailable && note
-              ? (deletedPreview?.title ?? note.title)
-              : "Doc"}
+            {!unavailable && note ? displayTitle : "Doc"}
           </h2>
         )}
         {note && !unavailable && (
@@ -610,7 +625,7 @@ export function NoteDocument({
             note={note.event}
             status={
               note.deleted
-                ? "Deleted"
+                ? "Moved to Trash"
                 : canEdit
                   ? saving
                     ? "Saving…"
@@ -618,7 +633,7 @@ export function NoteDocument({
                       ? "Save paused"
                       : dirty
                         ? "Unsaved changes"
-                        : status || "Saved"
+                        : "Saved"
                   : undefined
             }
             isAgent={!!profile?.isAgent}
@@ -632,6 +647,7 @@ export function NoteDocument({
               <Select
                 label="Doc mode"
                 variant="compact"
+                appearance={!loading && editing ? "subtle" : "outlined"}
                 size="sm"
                 value={loading ? "" : editing ? "editing" : "viewing"}
                 disabled={loading || busy || saving}
@@ -644,10 +660,7 @@ export function NoteDocument({
                     ],
                   },
                 ]}
-                onValueChange={(mode) => {
-                  setStatus("");
-                  setEditing(mode === "editing");
-                }}
+                onValueChange={(mode) => setEditing(mode === "editing")}
               />
             </div>
           )}
@@ -663,31 +676,33 @@ export function NoteDocument({
             <Button
               variant="prominent"
               size="sm"
-              disabled={busy || !!conflict || !deletedPreview?.editable}
+              disabled={busy || !!conflict || !retainedVersion?.editable}
               loading={saving}
-              onClick={() => void save(deletedPreview)}
+              onClick={() => void save(retainedVersion)}
             >
               Restore
             </Button>
           )}
-          <IconButton
-            aria-label="Refresh doc"
-            title="Refresh doc"
-            icon={
-              <ArrowsClockwiseIcon
-                size={16}
-                aria-hidden="true"
-                className={
-                  busy && !loading ? "motion-safe:animate-spin" : undefined
-                }
-              />
-            }
-            aria-busy={busy && !loading}
-            disabled={loading || busy || saving}
-            onClick={() => {
-              void refresh();
-            }}
-          />
+          {showRefresh && (
+            <IconButton
+              aria-label="Refresh doc"
+              title="Refresh doc"
+              icon={
+                <ArrowsClockwiseIcon
+                  size={16}
+                  aria-hidden="true"
+                  className={busy ? "motion-safe:animate-spin" : undefined}
+                />
+              }
+              aria-busy={busy}
+              disabled={busy || saving}
+              onClick={() => {
+                void refresh({ background: !!note && !unavailable });
+                if (retainedReadFailed)
+                  setRetainedAttempt((attempt) => attempt + 1);
+              }}
+            />
+          )}
           {loading && (
             <>
               {shareButton}
@@ -703,7 +718,6 @@ export function NoteDocument({
                   {onOpenInDocs && (
                     <MenuItem onClick={onOpenInDocs}>Open in Docs</MenuItem>
                   )}
-                  <MenuItem onClick={copyLink}>Copy doc link</MenuItem>
                   {canEdit && !note.deleted && (
                     <MenuItem
                       disabled={busy}
@@ -732,10 +746,11 @@ export function NoteDocument({
                   />
                   {canEdit && !note.deleted && (
                     <MenuItem
+                      tone="danger"
                       disabled={busy || saving || dirty}
                       onClick={() => setDialog("delete")}
                     >
-                      Delete doc
+                      Move to Trash
                     </MenuItem>
                   )}
                 </MenuPopup>
@@ -756,44 +771,39 @@ export function NoteDocument({
               : "This doc format is read-only in this version of Buzz."}
           </p>
         )}
-        {previewError && <p role="alert">{previewError} Refresh to retry.</p>}
-        {note &&
-          (editing || (!unavailable && (!note.deleted || deletedPreview))) && (
-            <div
-              ref={body}
-              className={source && editing ? styles.sourceBody : styles.stack}
+        {note?.deleted && !unavailable && (
+          <p className="text-body-sm text-subtle">This doc is in Trash.</p>
+        )}
+        {note && !note.deleted && (editing || !unavailable) && (
+          <div
+            ref={body}
+            className={source && editing ? styles.sourceBody : styles.stack}
+          >
+            <NoteEditor
+              ref={editor}
+              source={source}
+              onSourceChange={setSource}
+              toolbarTarget={toolbarTarget}
+              value={markdown}
+              editing={editing}
+              onChange={setMarkdown}
+              disabled={blocking}
+              linkOpen={dialog === "link"}
+              onLinkOpenChange={(open) => setDialog(open ? "link" : undefined)}
+              onSave={() => {
+                if (saveError || restoreFrom) void save();
+              }}
             >
-              <NoteEditor
-                ref={editor}
-                source={source}
-                onSourceChange={setSource}
-                toolbarTarget={toolbarTarget}
-                value={markdown}
-                editing={editing}
-                onChange={setMarkdown}
-                disabled={blocking}
-                linkOpen={dialog === "link"}
-                onLinkOpenChange={(open) =>
-                  setDialog(open ? "link" : undefined)
-                }
-                onSave={() => {
-                  if (saveError || restoreFrom) void save();
-                }}
-              >
-                <NoteMarkdown
-                  text={
-                    note.deleted && !editing
-                      ? (deletedPreview?.markdown ?? "")
-                      : markdown
-                  }
-                  community={community}
-                  onOpen={onOpen}
-                  session={workspace.session}
-                  openLink={onOpenLink}
-                />
-              </NoteEditor>
-            </div>
-          )}
+              <NoteMarkdown
+                text={markdown}
+                community={community}
+                onOpen={onOpen}
+                session={workspace.session}
+                openLink={onOpenLink}
+              />
+            </NoteEditor>
+          </div>
+        )}
         {note && dialog === "share" && (
           <NoteSharing
             note={note}
@@ -822,8 +832,8 @@ export function NoteDocument({
             onOpenChange={(open) => {
               if (!open) setDialog(undefined);
             }}
-            title="Delete this doc?"
-            description="You can restore it from retained history."
+            title="Move this doc to Trash?"
+            description="You can restore it later."
             preventClose={busy}
             actions={
               <>
@@ -835,6 +845,7 @@ export function NoteDocument({
                   Cancel
                 </Button>
                 <Button
+                  variant="destructive"
                   disabled={busy}
                   onClick={() => {
                     void run(async () => {
@@ -849,7 +860,7 @@ export function NoteDocument({
                     });
                   }}
                 >
-                  Delete doc
+                  Move to Trash
                 </Button>
               </>
             }
@@ -891,7 +902,7 @@ export function NoteDocument({
             <h2 className="text-label">{conflict.title}</h2>
             <pre className={styles.source}>
               {conflict.markdown ||
-                (conflict.deleted ? "The doc was deleted." : "Empty doc")}
+                (conflict.deleted ? "This doc is in Trash." : "Empty doc")}
             </pre>
           </Dialog>
         )}

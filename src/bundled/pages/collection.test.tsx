@@ -74,7 +74,7 @@ it("drops access lost between the finite read and follower attachment", async ()
   expect(f.liveChannels()).not.toContain(f.shared.channel);
 });
 
-it("follows unopened catalogue heads, retains tombstones for Show deleted, and releases routes", async () => {
+it("follows unopened catalogue heads, retains tombstones for the Trash filter, and releases routes", async () => {
   const f = await fixture();
   expect(f.liveChannels()).toEqual(
     expect.arrayContaining([f.mine.channel, f.shared.channel]),

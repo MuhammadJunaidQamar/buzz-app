@@ -8,8 +8,9 @@ and can be disabled in Settings → Plugins.
 Open Docs from the dock to create a document or find a doc you can access.
 The collection shows the docs you can read. Search by title or content.
 Loaded collections follow revisions and access changes.
-Revoked docs are removed. Deleted docs are hidden from ordinary agent lists and
-remain available through explicit reads, retained history and Show deleted.
+Revoked docs are removed. Docs in Trash stay out of ordinary agent lists and
+remain available through explicit reads, retained history and the **Show Trash**
+filter in Docs.
 Edits save automatically after a pause. Use Retry save after a failed save.
 Browsing within Docs retains unsaved drafts for the connected session. Unsaved work is not a synced or permanent backup.
 
@@ -18,8 +19,8 @@ lets community members read, while editors can change content. Links grant no
 access. Sharing includes retained revisions, and the relay operator can read the
 content; Docs is not end-to-end encrypted.
 
-Doc actions also provides Markdown source, retained revisions and
-recoverable deletion. Restore creates a new current revision while retaining history.
+Doc actions also provides Markdown source, retained revisions and **Move to
+Trash**. Restore creates a new current revision while retaining history.
 Conflicting saves preserve your draft and require reconciliation with the latest doc.
 
 Doc links open beside the conversation. Back and Forward restore the document;

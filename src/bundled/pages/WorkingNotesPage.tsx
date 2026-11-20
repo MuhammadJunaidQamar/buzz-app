@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -17,10 +18,12 @@ import {
   noteAddress,
   noteUrl,
   parseNoteUrl,
+  type Note,
   type NoteAddress,
 } from "./model";
 import type { NotesWorkspace } from "./workspace";
-import { useNotesCollection } from "./collection";
+import { useNotesCollection, useTrashTitles } from "./collection";
+import { noteDisplayTitle } from "./NoteMetadata";
 import type { PageProps } from "../../features/pages/service";
 import { usePagesUi } from "./ui";
 import type { PanelProps } from "../../features/panels/service";
@@ -151,18 +154,34 @@ export function WorkingNotesCommunity({
   const request = relay
     ? navigation?.forSession(relay, relay.snapshot())
     : undefined;
-  const route =
-    request?.target.kind === "page" ? request.target.route?.params : undefined;
-  const destination = useMemo(() => workingRoute(route), [route]);
+  const requestedDestination = useMemo(
+    () =>
+      request?.target.kind === "page"
+        ? workingRoute(request.target.route?.params)
+        : undefined,
+    [request],
+  );
+  const presentedDestination = useRef(requestedDestination);
+  useLayoutEffect(() => {
+    if (request) presentedDestination.current = requestedDestination;
+  }, [request, requestedDestination]);
+  // The host briefly unbinds navigation between visits. Keep the current
+  // document visible so rebinding does not replay its opening focus.
+  const destination = request
+    ? requestedDestination
+    : presentedDestination.current;
   const initial = useMemo(
     () => (destination?.view === "page" ? noteAddress(destination) : undefined),
     [destination],
   );
   const searchRef = useRef<HTMLElement>(null);
-  const { collection, loading, error, load, changed, remove } =
+  const { collection, loading, error, showRefresh, load, changed, remove } =
     useNotesCollection(workspace);
   const [query, setQuery] = useState(destination?.query ?? "");
   const [trash, setTrash] = useState(destination?.trash ?? false);
+  const trashTitles = useTrashTitles(workspace, collection.notes, trash);
+  const title = (note: Note) =>
+    noteDisplayTitle(note, trashTitles.get(note.revision));
   const { profiles, viewer } = workspace.session;
   const identities = useMemo(
     () =>
@@ -258,30 +277,29 @@ export function WorkingNotesCommunity({
     });
   };
   useEffect(() => {
+    if (!request || !destination) return;
     if (initial) reveal(initial);
-    else if (destination) setSelected("browse");
-    if (destination) {
-      setQuery(destination.query ?? "");
-      setTrash(destination.trash ?? false);
-      if (destination.view === "new" && destination.draft) {
-        const created = createdDrafts.current.get(destination.draft);
-        if (created) {
-          reveal(created);
-          const { draft: _draft, ...rest } = destination;
-          visit({ ...rest, view: "page", ...created }, true);
-        } else {
-          if (!drafts.current.has(destination.draft))
-            drafts.current.set(destination.draft, {
-              id: destination.draft,
-              title: "",
-              markdown: "",
-            });
-          setSelected(`new:${destination.draft}`);
-        }
+    else setSelected("browse");
+    setQuery(destination.query ?? "");
+    setTrash(destination.trash ?? false);
+    if (destination.view === "new" && destination.draft) {
+      const created = createdDrafts.current.get(destination.draft);
+      if (created) {
+        reveal(created);
+        const { draft: _draft, ...rest } = destination;
+        visit({ ...rest, view: "page", ...created }, true);
+      } else {
+        if (!drafts.current.has(destination.draft))
+          drafts.current.set(destination.draft, {
+            id: destination.draft,
+            title: "",
+            markdown: "",
+          });
+        setSelected(`new:${destination.draft}`);
       }
     }
-  }, [initial, destination, reveal, visit]);
-  const visible = collection.notes.filter((note) => trash || !note.deleted);
+  }, [request, initial, destination, reveal, visit]);
+  const visible = collection.notes.filter((note) => note.deleted === trash);
   return (
     <NotesPage
       community={workspace.session.scope.replace(/:[0-9a-f]{64}$/, "")}
@@ -299,10 +317,12 @@ export function WorkingNotesCommunity({
       }}
       {...{
         selected,
+        title,
         query,
         trash,
         searchRef,
         loading,
+        showRefresh,
         more: collection.more,
         error,
         search: (value, commit) => {
@@ -314,13 +334,14 @@ export function WorkingNotesCommunity({
               trash,
             });
         },
-        showDeleted: (value) => {
+        openTrash: (value) => {
           setTrash(value);
+          setQuery("");
           visit({
-            ...(destination ?? { view: "browse" }),
-            query,
+            view: "browse",
             trash: value,
           });
+          requestAnimationFrame(() => searchRef.current?.focus());
         },
         create: () => newNote({ title: "", markdown: "" }),
         refresh: () => {
@@ -331,16 +352,14 @@ export function WorkingNotesCommunity({
         },
         browse,
         entries: visible,
-        canFilter: !!collection.notes.length || trash,
         open,
         items: [
           ...opened.map((address) => {
             const key = noteKey(address);
+            const note = collection.notes.find((note) => noteKey(note) === key);
             return {
               id: key,
-              label:
-                collection.notes.find((note) => noteKey(note) === key)?.title ??
-                "Doc",
+              label: note ? title(note) : "Doc",
               content: (
                 <NoteDocument
                   address={address}
@@ -348,7 +367,10 @@ export function WorkingNotesCommunity({
                   workspace={workspace}
                   active={selected === key}
                   view={
-                    selected === key && destination?.view === "page"
+                    selected === key &&
+                    destination?.view === "page" &&
+                    initial &&
+                    noteKey(initial) === key
                       ? destination
                       : undefined
                   }
@@ -482,7 +504,7 @@ function NotePanelContents({
       <NoteDocument
         address={initial}
         workspace={workspace}
-        onChange={(note) => setTitle(note.title)}
+        onChange={(note) => setTitle(noteDisplayTitle(note))}
         onUnavailable={() => setTitle("Doc")}
         onOpen={open}
         onOpenInDocs={showInDocs}

@@ -190,7 +190,13 @@ function RoutedNotes({ Entry }: { Entry: ComponentType<PageProps> }) {
     binding.request.complete({ status: "opened" });
     return binding.dispose;
   }, [state.attempt, state.entry.target]);
-  return <Entry navigation={request} />;
+  // The app does not expose the previous visit's request while it binds a new
+  // one. Exercise the same gap when switching modes inside a document.
+  return (
+    <Entry
+      navigation={request?.entryId === state.entry.id ? request : undefined}
+    />
+  );
 }
 function Fixture() {
   const navigation = useSyncExternalStore(

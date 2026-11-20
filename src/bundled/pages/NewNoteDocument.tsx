@@ -234,6 +234,7 @@ export function NewNoteDocument({
           <Select
             label="Doc mode"
             variant="compact"
+            appearance="subtle"
             size="sm"
             value="editing"
             onValueChange={() => {}}

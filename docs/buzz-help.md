@@ -1199,12 +1199,19 @@ The collection shows the docs you can read. Search by title or content. Each
 doc row shows its last editor’s avatar beside the relative save time. Hover for
 their name.
 Loaded collections follow saved revisions and access changes. Revoked docs are
-removed and deleted docs stay hidden unless you show deleted.
+removed. Use **Filter docs → Show Trash** to browse or search only
+trashed docs. Select the **Trash** chip in the search bar to return to the main list.
+The list and open docs check for edits automatically. If **Refresh docs** or
+**Refresh doc** appears, use it to check again.
 
-Use Share doc to grant access. New docs are private; View only allows community
-members to read. A link grants no access. Sharing includes retained revisions,
-and the relay operator can read content. Doc actions also offers revision
-history with each revision’s author and avatar, plus recoverable deletion.
+Open **Share doc** to grant access or choose **Copy link**. New docs are private;
+View only allows community members to read. A link grants no access. Sharing
+includes retained revisions, and the relay operator can read content. Doc
+actions offers revision history with each revision’s author and avatar. Use
+**Move to Trash** to hide a doc from the main list. A doc in Trash shows its
+title with “(in Trash)”. Readers can view earlier versions under **Doc actions →
+Revision history**. Editors can choose **Restore** or restore a specific version
+from the revision preview.
 Revision times are relative; hover to see the exact date and time.
 Restore saves a new revision.
 Conflicting edits preserve the draft until you reconcile the newer revision.

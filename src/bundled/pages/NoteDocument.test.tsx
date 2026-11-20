@@ -11,8 +11,9 @@ import {
 import { StrictMode } from "react";
 import { expect, it, vi, type MockInstance } from "vitest";
 import { composerDOMFixture } from "../../features/messages/composer-testing";
-import { noteKey, noteUrl } from "./model";
+import { noteKey, noteTemplate, noteUrl } from "./model";
 import type { RelaySession } from "../../features/relay/session";
+import { ReadError } from "../../features/relay/errors";
 import { eventDto } from "../../features/relay/events";
 import { noteTools } from "./tools";
 import type { NotesWorkspace } from "./workspace";
@@ -49,7 +50,8 @@ it.each([false, true])(
       const mode = screen.getByRole("combobox", { name: "Doc mode" });
       expect(mode).toBeDisabled();
       expect(mode).toHaveTextContent(/^$/);
-      for (const name of ["Refresh doc", "Share doc", "Doc actions"]) {
+      expect(screen.queryByRole("button", { name: "Refresh doc" })).toBeNull();
+      for (const name of ["Share doc", "Doc actions"]) {
         expect(screen.getByRole("button", { name })).toBeDisabled();
       }
     } finally {
@@ -299,6 +301,64 @@ it("accepts a remote revision while clean and editing, then preserves a dirty dr
   expect(f.save).not.toHaveBeenCalled();
 });
 
+it("offers a quiet refresh after a transient update error and hides it after recovery", async () => {
+  const f = await fixture();
+  vi.useRealTimers();
+  const refresh = () => screen.queryByRole("button", { name: "Refresh doc" });
+  expect(refresh()).toBeNull();
+  const next = await f.edit(f.carl, f.note, {
+    title: "Remote plan",
+    markdown: "Another edit",
+  });
+  vi.spyOn(f.workspace, "open").mockRejectedValueOnce(
+    new ReadError("unavailable", "Relay read failed (503)", 503),
+  );
+  await act(async () => f.echo(next));
+  expect(f.title).toHaveValue("Plan");
+  expect(f.title).toBeEnabled();
+  expect(screen.queryByRole("alert")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Refresh doc" }));
+  await waitFor(() => {
+    expect(f.title).toHaveValue("Remote plan");
+    expect(refresh()).toBeNull();
+  });
+});
+
+it("shows refresh during a live update interruption", async () => {
+  let status: ReturnType<RelaySession["live"]["snapshot"]>["status"] =
+    "connected";
+  let notify = () => {};
+  const f = await workspaceFixture({ live: true }, (session) => ({
+    ...session,
+    live: {
+      ...session.live,
+      snapshot: () => ({ ...session.live.snapshot(), status }),
+      subscribe(listener) {
+        notify = listener;
+        return session.live.subscribe(listener);
+      },
+    },
+  }));
+  const note = f.seed("Plan", "Body");
+  render(
+    <NoteDocument address={note} workspace={f.workspace} onOpen={vi.fn()} />,
+  );
+  await screen.findByRole("article", { name: "Plan" });
+  const refresh = () => screen.queryByRole("button", { name: "Refresh doc" });
+  expect(refresh()).toBeNull();
+  act(() => {
+    status = "retrying";
+    notify();
+  });
+  expect(refresh()).toBeEnabled();
+  expect(screen.queryByRole("alert")).toBeNull();
+  act(() => {
+    status = "connected";
+    notify();
+  });
+  expect(refresh()).toBeNull();
+});
+
 it("preserves a concurrent draft and does not overwrite until the user resolves the conflict", async () => {
   const f = await fixture();
   f.change("My draft");
@@ -343,8 +403,8 @@ async function historyFixture(deleted = false) {
     { title: "New plan", markdown: deleted ? "" : "New body" },
     deleted ? "delete" : "update",
   );
-  fireEvent.click(screen.getByRole("button", { name: "Refresh doc" }));
-  if (deleted) await screen.findByRole("button", { name: "Restore" });
+  await act(async () => f.echo(current.event));
+  if (deleted) await screen.findByRole("heading", { name: "Plan (in Trash)" });
   else await waitFor(() => expect(f.title).toHaveValue("New plan"));
   return { ...f, current };
 }
@@ -357,7 +417,7 @@ async function previewOriginal() {
   const preview = await screen.findByRole("dialog", {
     name: "Revision preview",
   });
-  await within(preview).findByRole("button", { name: "Restore this version" });
+  await within(preview).findByRole("region", { name: "Selected revision" });
   return preview;
 }
 it("restores immediately as a new head and keeps history", async () => {
@@ -474,12 +534,21 @@ it("preserves a draft when another author wins before restore", async () => {
   expect(f.title).toHaveValue("My pending draft");
   expect((await f.workspace.open(f.note)).title).toBe("Remote winner");
 });
-it("restores a deleted page directly from a retained version", async () => {
+it("keeps a deleted doc hidden and restores a selected revision after a failed write", async () => {
   const f = await historyFixture(true);
+  expect(screen.getByRole("status")).toHaveTextContent("Moved to Trash");
+  expect(screen.getByText("This doc is in Trash.")).toBeVisible();
+  expect(screen.queryByText("Original body")).toBeNull();
+  expect(screen.getByRole("button", { name: "Restore" })).toBeEnabled();
   const preview = await previewOriginal();
-  fireEvent.click(
-    within(preview).getByRole("button", { name: "Restore this version" }),
-  );
+  const restore = within(preview).getByRole("button", {
+    name: "Restore this version",
+  });
+  f.save.mockRejectedValueOnce(new Error("Offline"));
+  fireEvent.click(restore);
+  await within(preview).findByText("Offline");
+  expect(within(preview).getByText("Original body")).toBeVisible();
+  fireEvent.click(restore);
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
@@ -488,23 +557,34 @@ it("restores a deleted page directly from a retained version", async () => {
   expect(f.save.mock.calls[0]?.[1].restoreFrom?.revision).toBe(f.note.revision);
 });
 
-it("previews the last content of a deleted page and restores it in one click after a failed write", async () => {
-  const f = await historyFixture(true);
-  await screen.findByText("Original body");
-  expect(screen.getByRole("status")).toHaveTextContent("Deleted");
-  expect(screen.getByRole("status")).not.toHaveTextContent("Saved");
-  const restore = await screen.findByRole("button", {
-    name: "Restore",
-  });
-  await waitFor(() => expect(restore).toBeEnabled());
-  f.save.mockRejectedValueOnce(new Error("Offline"));
-  fireEvent.click(restore);
-  await screen.findByText(/Your draft is kept/);
-  expect(screen.getByText("Original body")).toBeVisible();
-  fireEvent.click(restore);
-  await screen.findByRole("textbox", { name: "Title" });
-  expect((await f.workspace.open(f.note)).markdown).toBe("Original body");
-  expect(f.save.mock.calls.at(-1)?.[2]).toBe("restore");
+it("shows the retained title to a reader and keeps the body in revision history", async () => {
+  const f = await workspaceFixture();
+  const note = f.seed("Plan", "# Earlier draft\n\nOriginal **body**");
+  const storage = f.channels.get(note.channel);
+  if (!storage) throw new Error("Missing doc storage");
+  storage.creator = f.sam.pubkey;
+  storage.roles = { [f.sam.pubkey]: "owner", [f.viewer.pubkey]: "guest" };
+  await f
+    .client(f.sam)
+    .publish(
+      noteTemplate(note, { title: note.title, markdown: "" }, note, "delete"),
+    );
+  render(
+    <NoteDocument address={note} workspace={f.workspace} onOpen={vi.fn()} />,
+  );
+  await screen.findByRole("heading", { name: "Plan (in Trash)" });
+  expect(screen.queryByRole("heading", { name: "Earlier draft" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
+  const preview = await previewOriginal();
+  expect(
+    within(preview).getByRole("heading", { name: "Earlier draft" }),
+  ).toBeVisible();
+  expect(
+    within(preview).getByText("body", { selector: "strong" }),
+  ).toBeVisible();
+  expect(
+    within(preview).queryByRole("button", { name: "Restore this version" }),
+  ).toBeNull();
 });
 
 it("keeps formatted Buzz conversation links and Page navigation through the shared Markdown owner", async () => {

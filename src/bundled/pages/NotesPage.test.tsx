@@ -2,6 +2,8 @@
 import "@testing-library/jest-dom/vitest";
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
+import { ReadError } from "../../features/relay/errors";
+import { eventDto } from "../../features/relay/events";
 import { advance, gate, render, workspaceFixture } from "./ui-testing";
 import { WorkingNotesCommunity } from "./WorkingNotesPage";
 
@@ -74,6 +76,39 @@ it("recovers from a cancelled read and offers an inline retry after a failure", 
   expect(request).toHaveBeenCalledTimes(3);
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Research plan" })).toBeVisible();
+});
+
+it("quietly offers refresh when a live doc update cannot be read", async () => {
+  const f = await workspaceFixture({ live: true });
+  const note = f.seed("Research plan", "Original body");
+  render(<WorkingNotesCommunity workspace={f.workspace} />);
+  await screen.findByRole("link", { name: "Research plan" });
+  const refresh = () => screen.queryByRole("button", { name: "Refresh docs" });
+  expect(refresh()).toBeNull();
+  const update = await f.edit(f.carl, note, {
+    title: "Revised plan",
+    markdown: "Updated body",
+  });
+  vi.spyOn(f.workspace, "open").mockRejectedValueOnce(
+    new ReadError("unavailable", "Relay read failed (503)", 503),
+  );
+  await act(async () => f.deliver(eventDto(update)));
+  expect(screen.getByRole("link", { name: "Research plan" })).toBeVisible();
+  expect(screen.queryByRole("alert")).toBeNull();
+  const load = vi
+    .spyOn(f.workspace, "list")
+    .mockRejectedValueOnce(
+      new ReadError("unavailable", "Relay read failed (503)", 503),
+    );
+  fireEvent.click(await screen.findByRole("button", { name: "Refresh docs" }));
+  await act(async () => {
+    await Promise.allSettled([load.mock.results.at(-1)?.value]);
+  });
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getByRole("link", { name: "Research plan" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Refresh docs" }));
+  await screen.findByRole("link", { name: "Revised plan" });
+  expect(refresh()).toBeNull();
 });
 
 it("lists all readable docs together with last-editor attribution and searches across creators", async () => {

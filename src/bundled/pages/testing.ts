@@ -164,7 +164,7 @@ export async function notesFixture(options: { live?: boolean } = {}) {
           : [
               ...profiles,
               ...channelEvents(),
-              ...heads.values(),
+              ...(filter.ids ? revisions : heads.values()),
               ...accepted.filter((event) => event.kind !== 45010),
             ];
       pool = pool.filter((event) => {

@@ -43,6 +43,28 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.revisionByline {
+  display: flex;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+.revisionId {
+  flex-shrink: 100;
+}
+.revisionPlaceholder {
+  display: flex;
+  min-height: var(--size-row);
+  align-items: center;
+  gap: var(--space-row-gap);
+  padding: var(--space-2) var(--space-3);
+}
+.revisionPreview {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border-standard);
+  border-radius: var(--radius-control);
+  padding: var(--space-4);
+}
 .source {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -59,6 +81,7 @@
 
 .documentPane {
   position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   height: 100%;

@@ -473,6 +473,14 @@ export function SelectExamples() {
           groups={workspaceGroups}
         />
         <Select
+          label="Subtle workspace"
+          variant="compact"
+          appearance="subtle"
+          value={value}
+          onValueChange={setValue}
+          groups={workspaceGroups}
+        />
+        <Select
           label="Read-only workspace"
           variant="field"
           readOnly

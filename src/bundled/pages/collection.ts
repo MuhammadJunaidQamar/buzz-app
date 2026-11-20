@@ -5,10 +5,18 @@ import {
   useRef,
   useState,
 } from "react";
-import { readErrorKind } from "../../features/relay/errors";
+import { isTransientFailure, readErrorKind } from "../../features/relay/errors";
 import { retryRead } from "../../features/relay/read-retry";
-import { noteKey, noteTag, type Note } from "./model";
+import {
+  NOTE_KIND,
+  NOTE_PAGE,
+  noteKey,
+  noteTag,
+  parseNote,
+  type Note,
+} from "./model";
 import type { NotesPage, NotesWorkspace } from "./workspace";
+import { useLiveUpdatesInterrupted } from "./live-updates";
 
 function cancelledRead(error: unknown) {
   return (
@@ -23,6 +31,11 @@ export function useNotesCollection(workspace: NotesWorkspace) {
   const [collection, publish] = useState(current.current);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [needsRefresh, setNeedsRefresh] = useState(false);
+  const liveInterrupted = useLiveUpdatesInterrupted(
+    workspace.session.live,
+    (channel) => collection.notes.some((note) => note.channel === channel),
+  );
   const listing = useRef<AbortController | undefined>(undefined);
   const reading = useRef(new Map<string, AbortController>());
   const revoked = useRef(new Set<string>());
@@ -108,6 +121,7 @@ export function useNotesCollection(workspace: NotesWorkspace) {
           (note) => !!workspace.session.channels.get?.(note.channel),
         );
         for (const note of page.notes) revoked.current.delete(note.channel);
+        if (!more) setNeedsRefresh(false);
         setCollection((old) => ({
           ...page,
           notes: more
@@ -122,7 +136,10 @@ export function useNotesCollection(workspace: NotesWorkspace) {
             : page.notes,
         }));
       } catch (error) {
-        if (!controller.signal.aborted)
+        if (controller.signal.aborted) return;
+        if (!more && current.current.notes.length && isTransientFailure(error))
+          setNeedsRefresh(true);
+        else
           setError(
             cancelledRead(error)
               ? "Loading docs was interrupted."
@@ -184,8 +201,15 @@ export function useNotesCollection(workspace: NotesWorkspace) {
               )
                 changed(head);
             })
-            .catch(() => {
-              if (!controller.signal.aborted) remove([note.channel]);
+            .catch((error: unknown) => {
+              if (controller.signal.aborted) return;
+              requests.delete(note.channel);
+              if (
+                isTransientFailure(error) &&
+                workspace.session.channels.get?.(note.channel)
+              )
+                setNeedsRefresh(true);
+              else remove([note.channel]);
             });
         }
       },
@@ -198,5 +222,65 @@ export function useNotesCollection(workspace: NotesWorkspace) {
     if (denied.length) remove(denied);
     return stop;
   }, [workspace, channels, cancelLoad, changed, remove]);
-  return { collection, loading, error, load, changed, remove };
+  const showRefresh =
+    !error &&
+    (needsRefresh ||
+      (liveInterrupted && (!loading || collection.notes.length > 0)));
+  return { collection, loading, error, showRefresh, load, changed, remove };
+}
+
+/** Resolve retained titles only when browsing Trash, in batches of exact revision IDs. */
+export function useTrashTitles(
+  workspace: NotesWorkspace,
+  entries: readonly Note[],
+  enabled: boolean,
+) {
+  const [titles, setTitles] = useState(
+    () => new Map<string, string | undefined>(),
+  );
+  useEffect(() => {
+    if (!enabled) return;
+    const pending = entries.flatMap((note) => {
+      const parent =
+        note.deleted &&
+        !titles.has(note.revision) &&
+        noteTag(note.event, "prev");
+      return parent ? [{ note, parent }] : [];
+    });
+    if (!pending.length) return;
+    const controller = new AbortController();
+    const read = async () => {
+      const next = new Map(titles);
+      for (let offset = 0; offset < pending.length; offset += NOTE_PAGE) {
+        const batch = pending.slice(offset, offset + NOTE_PAGE);
+        const events = await workspace.read(
+          [
+            {
+              kinds: [NOTE_KIND],
+              ids: batch.map(({ parent }) => parent),
+              "#h": batch.map(({ note }) => note.channel),
+              limit: batch.length,
+            },
+          ],
+          controller.signal,
+        );
+        const byId = new Map(events.map((event) => [event.id, event]));
+        for (const { note, parent } of batch) {
+          const event = byId.get(parent);
+          const retained = event && parseNote(event);
+          next.set(
+            note.revision,
+            retained && !retained.deleted && noteKey(retained) === noteKey(note)
+              ? retained.title
+              : undefined,
+          );
+        }
+      }
+      controller.signal.throwIfAborted();
+      setTitles(next);
+    };
+    void read().catch(() => {});
+    return () => controller.abort();
+  }, [enabled, entries, titles, workspace]);
+  return titles;
 }

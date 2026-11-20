@@ -1,8 +1,13 @@
-import type { NoteEvent } from "./model";
+import type { Note, NoteEvent } from "./model";
 import type { ComponentProps } from "react";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { relativeTimestamp } from "../../shared/relative-timestamp";
 import styles from "./NotesPage.module.css";
+
+export function noteDisplayTitle(note: Note, retainedTitle?: string) {
+  if (!note.deleted) return note.title;
+  return retainedTitle ? `${retainedTitle} (in Trash)` : "Doc in Trash";
+}
 
 export function NoteBylinePlaceholder() {
   return (
@@ -37,12 +42,11 @@ export function NoteByline({
     <p className={`${styles.byline} text-caption text-secondary`}>
       <NoteAuthor name={author} picture={picture} isAgent={isAgent} /> ·
       <span role={status ? "status" : undefined}>
-        {status && status !== "Saved" && status !== "Deleted" ? (
+        {status && status !== "Saved" && status !== "Moved to Trash" ? (
           status
         ) : (
           <>
-            {status === "Deleted" ? "Deleted" : "Saved"}{" "}
-            <NoteTime note={note} />
+            {status || "Saved"} <NoteTime note={note} />
           </>
         )}
       </span>

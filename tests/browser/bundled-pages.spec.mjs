@@ -23,6 +23,82 @@ async function expectDocumentAtBottom(article) {
     .toBeLessThanOrEqual(1);
 }
 
+test("opens a Trash-only list, searches by retained title, and exits from the search bar", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/bundled-pages.html");
+  const title = "Connected pages plan";
+  const activeLink = page.getByRole("link", { name: title, exact: true });
+  const filter = page.getByRole("button", { name: "Filter docs" });
+  const trashFilter = page.getByRole("menuitemcheckbox", {
+    name: "Show Trash",
+  });
+  await expect(activeLink).toBeVisible();
+  await expect(page.getByRole("button", { name: "About docs" })).toHaveCount(0);
+  await activeLink.click();
+  await pageAction(
+    page,
+    page.getByRole("article", { name: title }),
+    "Move to Trash",
+  );
+  const confirm = page.getByRole("dialog", { name: "Move this doc to Trash?" });
+  await confirm.getByRole("button", { name: "Move to Trash" }).click();
+  await expect(
+    page.getByRole("heading", { name: `${title} (in Trash)` }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to docs", exact: true }).click();
+  const docs = page.getByRole("list", { name: "Docs" });
+  await expect(
+    docs.getByRole("listitem").first().getByRole("button", { name: "New doc" }),
+  ).toBeVisible();
+  await expect(activeLink).toHaveCount(0);
+  await expect(
+    docs.getByRole("button", { name: "Trash", exact: true }),
+  ).toHaveCount(0);
+  await filter.press("Enter");
+  await expect(trashFilter).not.toBeChecked();
+  await trashFilter.press("Enter");
+  const search = page.getByRole("searchbox", { name: "Search Trash" });
+  const trash = page.getByRole("list", { name: "Trash" });
+  const trashedLink = trash.getByRole("link", { name: `${title} (in Trash)` });
+  await expect(search).toBeFocused();
+  await expect(trashedLink).toBeVisible();
+  await expect(trash.getByRole("link")).toHaveCount(1);
+  await page.goBack();
+  await expect(docs).toBeVisible();
+  await page.goForward();
+  await expect(trashedLink).toBeVisible();
+  await search.fill("Storage research");
+  await expect(
+    page.getByText("No matching docs in Trash.", { exact: true }),
+  ).toBeVisible();
+  await search.fill("Connected pages");
+  await expect(trashedLink).toBeVisible();
+  await page.getByRole("button", { name: "Exit Trash" }).click();
+  await expect(
+    page.getByRole("searchbox", { name: "Search docs" }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("link", { name: "Storage research" }),
+  ).toBeVisible();
+  await filter.click();
+  await trashFilter.click();
+  await filter.click();
+  await expect(trashFilter).toBeChecked();
+  await page.keyboard.press("Escape");
+  await trashedLink.click();
+  const deleted = page.getByRole("article", { name: `${title} (in Trash)` });
+  await deleted.getByRole("button", { name: "Restore", exact: true }).click();
+  await expect(
+    page.getByRole("article", { name: title, exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to docs", exact: true }).click();
+  await expect(page.getByText("Trash is empty")).toBeVisible();
+  await page.getByRole("button", { name: "Exit Trash" }).click();
+  await expect(activeLink).toBeVisible();
+  await expect(page.getByRole("button", { name: "Exit Trash" })).toHaveCount(0);
+});
+
 // Browser boundary: plugin composition, native rich editing, mounted live delivery,
 // retained view state and responsive layout. Policy permutations live in Vitest.
 test("edits and preserves drafts using host UI, then adopts an agent revision without rewriting it", async ({
@@ -69,16 +145,29 @@ test("edits and preserves drafts using host UI, then adopts an agent revision wi
     exact: true,
   });
   await article.getByRole("button", { name: "Doc actions" }).click();
-  const copyDocLink = page.getByRole("menuitem", { name: "Copy doc link" });
-  await expect(copyDocLink).toBeVisible();
+  const menu = page.getByRole("menu");
   await expect(
-    page.getByRole("menuitem", { name: "Export Markdown" }),
+    menu.getByRole("menuitem", { name: "Move to Trash" }),
+  ).toHaveAttribute("data-tone", "danger");
+  await expect(
+    menu.getByRole("menuitem", { name: "Copy doc link" }),
   ).toHaveCount(0);
+  await expect(
+    menu.getByRole("menuitem", { name: "Export Markdown" }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
   if (browserName === "chromium") {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   }
-  await copyDocLink.click();
-  await expect(article.getByRole("status")).toHaveText("Doc link copied");
+  await article.getByRole("button", { name: "Share doc" }).click();
+  const share = page.getByRole("dialog", { name: "Share access" });
+  await share.getByRole("button", { name: "Copy link" }).click();
+  await expect(
+    share.getByRole("button", { name: "Link copied" }),
+  ).toBeVisible();
+  await share.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(share).toBeHidden();
   const body = article.getByRole("textbox", { name: "Doc body", exact: true });
   const [h1, h2] = await article
     .getByRole("heading", { name: /Connected notes|Supporting research/ })
@@ -266,7 +355,7 @@ test("keeps the document scroll position when switching modes after reopening", 
     const fixture = window.workingNotesFixture;
     const markdown = Array.from(
       { length: 28 },
-      (_, i) => `Paragraph ${i + 1} of the working plan.`,
+      (_, i) => `${i < 2 ? "- " : ""}Paragraph ${i + 1} of the working plan.`,
     ).join("\n\n");
     return fixture.agentEdit(fixture.plan, markdown);
   });
@@ -278,10 +367,21 @@ test("keeps the document scroll position when switching modes after reopening", 
   const body = article.getByRole("textbox", { name: "Doc body" });
   await expect(toolbar).toBeVisible();
   await expect(body).toContainText("Paragraph 28");
+  const firstLine = contents
+    .getByText("Paragraph 1 of the working plan.", { exact: true })
+    .filter({ visible: true });
+  const firstLineGap = async () => {
+    const line = await firstLine.boundingBox();
+    const control = await mode.boundingBox();
+    return line.y - control.y - control.height;
+  };
+  const editingGap = await firstLineGap();
   await mode.click();
   await page.getByRole("option", { name: "Viewing", exact: true }).click();
   await expect(mode).toHaveText("Viewing");
+  await expect(mode).toHaveAttribute("data-variant", "outline");
   await expect(toolbar).toHaveCount(0);
+  expect(await firstLineGap()).toBeCloseTo(editingGap, 0);
 
   await page.getByRole("button", { name: "Back to docs" }).click();
   await expect(link).toBeVisible();
@@ -294,6 +394,7 @@ test("keeps the document scroll position when switching modes after reopening", 
   await page.getByRole("option", { name: "Editing", exact: true }).click();
   await expect(toolbar).toBeVisible();
   await expect(mode).toHaveText("Editing");
+  await expect(mode).toHaveAttribute("data-variant", "subtle");
   await expect(body).not.toBeFocused();
   await expect(contents).toHaveJSProperty("scrollTop", 64);
 

@@ -4,53 +4,47 @@ import {
   ArrowLeftIcon,
   ArrowsClockwiseIcon,
   Filter2Icon,
-  InfoIcon,
   NoteIcon,
   PlusIcon,
+  XIcon,
 } from "../../shared/design-system/icons";
 import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
 import { Button } from "../../shared/design-system/ui/Button";
 import { EmptyState } from "../../shared/design-system/ui/EmptyState";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { LoadingRegion } from "../../shared/design-system/ui/LoadingRegion";
+import {
+  MenuCheckboxItem,
+  MenuPopup,
+  MenuRoot,
+  MenuTrigger,
+} from "../../shared/design-system/ui/Menu";
 import { Panel } from "../../shared/design-system/ui/Panel";
 import {
   PanelHeader,
   PanelHeaderLabel,
 } from "../../shared/design-system/ui/PanelHeader";
-import {
-  PopoverRoot,
-  PopoverTrigger,
-  PopoverPopup,
-  PopoverTitle,
-  PopoverDescription,
-} from "../../shared/design-system/ui/Popover";
 import { SearchField } from "../../shared/design-system/ui/SearchField";
 import { TypingDots } from "../../shared/design-system/ui/TypingDots";
-import {
-  MenuRoot,
-  MenuTrigger,
-  MenuPopup,
-  MenuCheckboxItem,
-} from "../../shared/design-system/ui/Menu";
 import { NoteAuthor, NoteTime } from "./NoteMetadata";
 import styles from "./NotesPage.module.css";
 
 export type NotesPageProps = {
   community: string;
   entries: readonly Note[];
+  title(note: Note): string;
   author(note: Note): Parameters<typeof NoteAuthor>[0];
   items: readonly { id: string; label: string; content: ReactNode }[];
   selected: string;
   query: string;
   trash: boolean;
-  canFilter: boolean;
   searchRef: RefObject<HTMLElement | null>;
   loading: boolean;
+  showRefresh: boolean;
   more: boolean;
   error: string;
   search(query: string, commit?: boolean): void;
-  showDeleted(value: boolean): void;
+  openTrash(value: boolean): void;
   create(): void;
   refresh(): void;
   loadMore(): void;
@@ -62,18 +56,19 @@ export type NotesPageProps = {
 export function NotesPage({
   community,
   entries,
+  title,
   author,
   items,
   selected,
   query,
   trash,
-  canFilter,
   searchRef,
   loading,
+  showRefresh,
   more,
   error,
   search,
-  showDeleted,
+  openTrash,
   create,
   refresh,
   loadMore,
@@ -89,7 +84,7 @@ export function NotesPage({
   const match = query.toLowerCase();
   const visible = entries
     .filter((note) =>
-      `${note.title}\n${note.markdown}\n${note.event.pubkey}`
+      `${title(note)}\n${note.markdown}\n${note.event.pubkey}`
         .toLowerCase()
         .includes(match),
     )
@@ -105,10 +100,10 @@ export function NotesPage({
       <NavigationItem
         nativeButton={false}
         role="link"
-        aria-label={note.title}
+        aria-label={title(note)}
         aria-description={`Last edited by ${author(note).name}`}
         render={<a href={noteUrl(note, community)} />}
-        label={<span className="text-label">{note.title}</span>}
+        label={<span className="text-label">{title(note)}</span>}
         icon={<NoteIcon size={20} className="text-subtle" aria-hidden="true" />}
         trailing={
           <span className={`${styles.rowMetadata} text-caption text-subtle`}>
@@ -140,65 +135,50 @@ export function NotesPage({
           <div className={styles.page}>
             <PanelHeader
               title={
-                <PanelHeaderLabel title="Docs" icon={<NoteIcon size={16} />}>
-                  <PopoverRoot>
-                    <PopoverTrigger
-                      render={
-                        <IconButton
-                          aria-label="About docs"
-                          title="About docs"
-                          icon={<InfoIcon size={16} />}
-                        />
-                      }
-                    />
-                    <PopoverPopup>
-                      <PopoverTitle>About Docs</PopoverTitle>
-                      <PopoverDescription
-                        render={<div className={styles.description} />}
-                      >
-                        <p>
-                          Create docs with people and agents. Open a title to
-                          read or edit the doc, then use Back to docs to return
-                          to the list.
-                        </p>
-                        <p>
-                          Each doc has its own sharing settings. Access includes
-                          retained revisions. The relay operator can read doc
-                          contents. Don’t include secrets.
-                        </p>
-                      </PopoverDescription>
-                    </PopoverPopup>
-                  </PopoverRoot>
-                </PanelHeaderLabel>
+                <PanelHeaderLabel title="Docs" icon={<NoteIcon size={16} />} />
               }
               actions={
-                <IconButton
-                  aria-label="Refresh docs"
-                  title="Refresh docs"
-                  icon={<ArrowsClockwiseIcon size={16} />}
-                  aria-busy={loading}
-                  disabled={loading}
-                  onClick={refresh}
-                />
+                showRefresh && (
+                  <IconButton
+                    aria-label="Refresh docs"
+                    title="Refresh docs"
+                    icon={<ArrowsClockwiseIcon size={16} />}
+                    aria-busy={loading}
+                    disabled={loading}
+                    onClick={refresh}
+                  />
+                )
               }
             />
             <div className={styles.body}>
               <SearchField
                 variant="capsule"
                 inputRef={searchRef}
-                label="Search docs"
-                disabled={!entries.length && !query}
-                placeholder="Search"
+                label={trash ? "Search Trash" : "Search docs"}
+                placeholder={trash ? "Search in Trash" : "Search"}
                 value={query}
                 onValueChange={(value) => search(value)}
                 onBlur={() => search(query, true)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") search(query, true);
                 }}
+                prefix={
+                  trash && (
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      aria-label="Exit Trash"
+                      title="Back to all docs"
+                      onClick={() => openTrash(false)}
+                    >
+                      <span>Trash</span>
+                      <XIcon size={12} aria-hidden="true" />
+                    </Button>
+                  )
+                }
                 trailing={
                   <MenuRoot>
                     <MenuTrigger
-                      disabled={!canFilter}
                       render={
                         <IconButton
                           aria-label="Filter docs"
@@ -211,10 +191,10 @@ export function NotesPage({
                     <MenuPopup align="end">
                       <MenuCheckboxItem
                         checked={trash}
-                        onCheckedChange={showDeleted}
+                        onCheckedChange={openTrash}
                         closeOnClick
                       >
-                        Show deleted docs
+                        Show Trash
                       </MenuCheckboxItem>
                     </MenuPopup>
                   </MenuRoot>
@@ -245,31 +225,44 @@ export function NotesPage({
                 {empty ? (
                   <EmptyState
                     icon={null}
-                    title="No docs yet"
-                    description="Create a doc or ask an agent to save one."
+                    title={trash ? "Trash is empty" : "No docs yet"}
+                    description={
+                      trash
+                        ? undefined
+                        : "Create a doc or ask an agent to save one."
+                    }
                     action={
-                      <Button variant="subtle" onClick={create}>
-                        <PlusIcon size={16} aria-hidden="true" />
-                        New doc
-                      </Button>
+                      !trash && (
+                        <Button variant="subtle" onClick={create}>
+                          <PlusIcon size={16} aria-hidden="true" />
+                          New doc
+                        </Button>
+                      )
                     }
                   />
                 ) : (
-                  <ul className={styles.titleList} aria-label="Docs">
+                  <ul
+                    className={styles.titleList}
+                    aria-label={trash ? "Trash" : "Docs"}
+                  >
+                    {!trash && (
+                      <li key="new-page">
+                        <NavigationItem
+                          variant="text"
+                          icon={<PlusIcon size={16} aria-hidden="true" />}
+                          label="New doc"
+                          onClick={create}
+                        />
+                      </li>
+                    )}
                     {visible.map(titleLink)}
-                    <li key="new-page">
-                      <NavigationItem
-                        variant="text"
-                        icon={<PlusIcon size={16} aria-hidden="true" />}
-                        label="New doc"
-                        onClick={create}
-                      />
-                    </li>
                   </ul>
                 )}
               </LoadingRegion>
               {!loading && !error && query && !visible.length && (
-                <p role="status">No matching docs.</p>
+                <p className={styles.noMatches} role="status">
+                  {trash ? "No matching docs in Trash." : "No matching docs."}
+                </p>
               )}
               {more && (
                 <div>

@@ -28,9 +28,13 @@ it("retries history, pages the open submenu, and selects with the retained offse
   const fixture = await workspaceFixture();
   const { workspace } = fixture;
   const note = fixture.seed("Plan", "Original");
+  const firstRead = gate();
   const history = vi
     .spyOn(workspace, "history")
-    .mockRejectedValueOnce(new Error("Offline"))
+    .mockImplementationOnce(async () => {
+      await firstRead.promise;
+      throw new Error("Offline");
+    })
     .mockImplementation(async (_note, offset) => ({
       revisions: [{ ...note, title: offset ? "Older plan" : "Current plan" }],
       more: !offset,
@@ -43,6 +47,16 @@ it("retries history, pages the open submenu, and selects with the retained offse
   await userEvent.click(
     await screen.findByRole("menuitem", { name: "Revision history" }),
   );
+  try {
+    const submenu = await screen.findByRole("menu", {
+      name: "Revision history",
+    });
+    expect(submenu).toHaveAttribute("aria-busy", "true");
+    expect(submenu).toHaveTextContent(/^$/);
+    expect(within(submenu).queryByRole("menuitem")).not.toBeInTheDocument();
+  } finally {
+    firstRead.release();
+  }
   expect(await screen.findByRole("alert")).toHaveTextContent("Offline");
   await userEvent.click(
     screen.getByRole("menuitem", { name: "Retry history" }),

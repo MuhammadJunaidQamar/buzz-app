@@ -17,6 +17,7 @@ import readerStyles from "./NotesPage.module.css";
 import { usePagesUi } from "./ui";
 import { noteUrl, type Note } from "./model";
 import type { NotesWorkspace } from "./workspace";
+import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { Button } from "../../shared/design-system/ui/Button";
 import { Dialog } from "../../shared/design-system/ui/Dialog";
 import { AlertDialog } from "../../shared/design-system/ui/AlertDialog";
@@ -277,8 +278,30 @@ export function NoteHistoryMenu({
       <MenuSubmenuTrigger disabled={disabled}>
         Revision history
       </MenuSubmenuTrigger>
-      <MenuSubmenuPopup aria-label="Revision history">
-        {busy && <MenuNote role="status">Reading revisions…</MenuNote>}
+      <MenuSubmenuPopup
+        aria-label="Revision history"
+        aria-busy={busy}
+        style={{ inlineSize: "19rem", minInlineSize: 0 }}
+      >
+        {busy &&
+          !page?.revisions.length &&
+          ["latest", "previous"].map((row) => (
+            <div
+              key={row}
+              aria-hidden="true"
+              className={styles.revisionPlaceholder}
+            >
+              <Avatar alt="" fallback="" fallbackContent="" size="small" />
+              <span className={`${styles.revision} flex-1`}>
+                <span className="flex h-lh items-center">
+                  <span className="h-2.5 w-3/5 rounded-full bg-affordance-disabled" />
+                </span>
+                <span className="flex h-lh items-center text-caption">
+                  <span className="h-2 w-4/5 rounded-full bg-affordance-disabled" />
+                </span>
+              </span>
+            </div>
+          ))}
         {error && (
           <>
             <MenuNote role="alert">{error}</MenuNote>
@@ -293,7 +316,7 @@ export function NoteHistoryMenu({
             disabled={busy || !!error}
             onClick={() => onSelect(revision.revision, offset)}
           >
-            <span aria-hidden="true">
+            <span aria-hidden="true" className="shrink-0">
               <NoteAuthor {...author(revision)} avatarOnly size="small" />
             </span>
             <span className={styles.revision}>
@@ -301,14 +324,23 @@ export function NoteHistoryMenu({
                 className="truncate"
                 title={revision.deleted ? undefined : revision.title}
               >
-                {revision.deleted ? "Deleted" : revision.title}
+                {revision.deleted ? "Moved to Trash" : revision.title}
               </span>
               <span
-                className={`${readerStyles.byline} text-caption text-subtle`}
+                className={`${styles.revisionByline} text-caption text-subtle`}
               >
-                {author(revision).name} · <NoteTime note={revision.event} /> ·{" "}
-                {revision.revision.slice(0, 8)}
-                {revision.revision === note.revision ? " · Current" : ""}
+                <span className="truncate">
+                  {author(revision).name} · <NoteTime note={revision.event} />
+                </span>
+                <span
+                  className={`${styles.revisionId} truncate`}
+                  title={revision.revision}
+                >
+                  ·&nbsp;{revision.revision.slice(0, 8)}
+                </span>
+                {revision.revision === note.revision && (
+                  <span className="shrink-0">·&nbsp;Current</span>
+                )}
               </span>
             </span>
           </MenuItem>
@@ -371,6 +403,7 @@ export function NoteHistory({
   selection: { revision?: string; offset?: number };
   trigger: RefObject<HTMLElement | null>;
 }) {
+  const Markdown = usePagesUi().conversation.Markdown;
   const { page, error, busy, retry, author } = useRevisions(
     note,
     workspace,
@@ -423,16 +456,25 @@ export function NoteHistory({
       {selected && (
         <section aria-label="Selected revision" className={styles.stack}>
           <h2 className="text-label">
-            {selected.deleted ? "Deleted" : selected.title}
+            {selected.deleted ? "Moved to Trash" : selected.title}
           </h2>
           <p className={`${readerStyles.byline} text-caption text-subtle`}>
             <NoteAuthor {...author(selected)} /> ·{" "}
             <NoteTime note={selected.event} /> · {selected.revision.slice(0, 8)}
           </p>
-          <pre className={styles.source}>
-            {selected.markdown ||
-              (selected.deleted ? "The doc was deleted." : "Empty revision")}
-          </pre>
+          <div className={styles.revisionPreview}>
+            {selected.markdown ? (
+              <Markdown
+                content={selected.markdown}
+                scale="document"
+                session={workspace.session}
+              />
+            ) : (
+              <p className="text-body-sm text-subtle">
+                {selected.deleted ? "This doc is in Trash." : "Empty revision"}
+              </p>
+            )}
+          </div>
         </section>
       )}
       {!busy && !error && !selected && (
