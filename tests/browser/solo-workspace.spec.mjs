@@ -446,8 +446,11 @@ test("Solo sidebar shares working activity, keyboard preview and local panel nav
   );
   await alpha.hover({ position: { x: 24, y: 14 } });
   await expect(action).toHaveCSS("opacity", "0");
+  await expect(badge).toBeVisible();
+  await expect(shared).toBeHidden();
   await action.hover();
   await expect(action).toHaveCSS("opacity", "1");
+  await expect(badge).toBeHidden();
   // Bare row actions keep standard artwork, unlike glyph-state toggles.
   await expect(action.locator("svg")).toHaveCSS("width", "16px");
   await expect(action.locator("svg")).toHaveCSS("height", "16px");

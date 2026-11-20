@@ -901,11 +901,11 @@ appTest.describe("Solo header accessories", () => {
       }
 
       appTest(
-        "keeps both actions clear of long metadata-only titles",
+        "keeps actions and accessories clear of long titles",
         async ({ page, app }) => {
           await admitNewTask(page);
           await page.goto(
-            `${app.origin}/?solo-region-fixture&compose-workspaces&workspace-hit-targets&header-accessories&leading-header`,
+            `${app.origin}/?solo-region-fixture&compose-workspaces&workspace-hit-targets&header-accessories&leading-header&channel-header-accessory`,
           );
           await openPage(page, "Messages");
           const resize = page.getByRole("separator", {
@@ -946,10 +946,25 @@ appTest.describe("Solo header accessories", () => {
             await expect(time).toBeHidden();
             await expect(actions.locator("..")).toHaveCSS("opacity", "1");
             expect(await label.boundingBox()).toEqual(rest);
-            const button = await pencil.boundingBox();
-            expect
-              .soft(rest.x + rest.width, title)
-              .toBeLessThanOrEqual(button.x);
+            await expect(pencil).toBeVisible();
+            const intersectsTitle = await label.evaluate((element) => {
+              const label = element.getBoundingClientRect();
+              const row = element.closest(".navigation-section-heading");
+              return [
+                ...row.querySelectorAll(
+                  ".navigation-section-heading-trailing button",
+                ),
+              ].some((button) => {
+                const control = button.getBoundingClientRect();
+                return (
+                  control.x < label.right &&
+                  control.right > label.x &&
+                  control.y < label.bottom &&
+                  control.bottom > label.y
+                );
+              });
+            });
+            expect(intersectsTitle, title).toBe(false);
           }
         },
       );

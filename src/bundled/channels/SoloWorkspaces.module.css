@@ -261,7 +261,7 @@
   pointer-events: none;
 }
 .organizedRow:is(
-    :hover,
+    :has(> :is([data-solo-row-action], [data-solo-shared]):hover),
     [data-context-menu-present],
     :has(:focus-visible),
     :has([aria-expanded="true"][aria-haspopup="menu"])
@@ -331,7 +331,7 @@
   }
   /* Shared never moves under the pointer; the menu opens beside it. */
   .organizedRow:is(
-    :hover,
+    :has(> :is([data-solo-row-action], [data-solo-shared]):hover),
     [data-context-menu-present],
     :has(:focus-visible),
     :has([aria-expanded="true"][aria-haspopup="menu"])
@@ -366,7 +366,7 @@
   }
   .sidebarContents
     .organizedRow:is(
-      :has(> [data-solo-row-action]:hover),
+      :has(> :is([data-solo-row-action], [data-solo-shared]):hover),
       [data-context-menu-present],
       :has(:focus-visible),
       :has([aria-expanded="true"][aria-haspopup="menu"])
@@ -380,7 +380,7 @@
   }
   .sidebarContents
     .organizedRow:has([data-solo-shared]):is(
-      :has(> [data-solo-row-action]:hover),
+      :has(> :is([data-solo-row-action], [data-solo-shared]):hover),
       [data-context-menu-present],
       :has(:focus-visible),
       :has([aria-expanded="true"][aria-haspopup="menu"])
@@ -394,7 +394,7 @@
     );
   }
   .organizedRow:is(
-      :has(> [data-solo-row-action]:hover),
+      :has(> :is([data-solo-row-action], [data-solo-shared]):hover),
       [data-context-menu-present],
       :has(:focus-visible),
       :has([aria-expanded="true"][aria-haspopup="menu"])

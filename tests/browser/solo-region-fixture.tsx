@@ -92,6 +92,9 @@ export const soloRegionFixture: BundledPlugin = {
       const wrapActions = new URL(location.href).searchParams.has(
         "wrap-conversation-actions",
       );
+      const channelHeaderAccessory = new URL(location.href).searchParams.has(
+        "channel-header-accessory",
+      );
       function Workspaces({
         ui,
         binding,
@@ -156,8 +159,13 @@ export const soloRegionFixture: BundledPlugin = {
               leadingHeader && id === "alpha" ? summary : undefined
             }
             headerAccessory={
-              !leadingHeader && id === "alpha" ? (
-                <HeaderAccessory label="Mark Alpha channel" />
+              (!leadingHeader && id === "alpha") ||
+              (channelHeaderAccessory && id === "gamma") ? (
+                <HeaderAccessory
+                  label={
+                    id === "alpha" ? "Mark Alpha channel" : "Mark long channel"
+                  }
+                />
               ) : undefined
             }
             headerMetadata={

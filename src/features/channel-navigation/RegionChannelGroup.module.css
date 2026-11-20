@@ -13,16 +13,14 @@
   }
 }
 
-@container solo-channel-group (max-width: 12rem) {
-  .group [class~="navigation-section-heading"]:has(> [data-reserve-space]) {
-    flex-wrap: wrap;
-  }
+.group [class~="navigation-section-heading"]:has(> [data-reserve-space]) {
+  flex-wrap: wrap;
+}
 
-  .group
-    [class~="navigation-section-heading"]:has(> [data-reserve-space])
-    > [class~="navigation-section-heading-label"] {
-    flex-basis: 100%;
-  }
+.group
+  [class~="navigation-section-heading"]:has(> [data-reserve-space])
+  > [class~="navigation-section-heading-label"] {
+  flex-basis: var(--navigation-heading-title-min);
 }
 
 .heading {
