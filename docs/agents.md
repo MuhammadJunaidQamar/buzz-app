@@ -1318,8 +1318,9 @@ Channel-access changes preserve relay-wide archive evidence and its pending read
 Explicit cache clear and session disposal discard it and cancel work. The sidebar
 starts a new read only with eligible DMs and a connected socket. An existing finite
 read, archive action or confirmation can finish over healthy HTTP or native IPC
-during socket loss. Reconnect stales settled evidence once and coalesces with a
-read still in flight; first connection preserves a successful explicit startup read.
+during socket loss. Reconnect stales settled evidence once; a read still in flight
+finishes, then the next demand rereads once. First connection preserves a
+successful explicit startup read.
 Recovery retains transient failures across socket changes. New sidebar recovery
 reads wait for connection; an active mention, template or member-add consumer can
 claim the same read or deferred retry without shortening its admission deadline.
@@ -1333,8 +1334,9 @@ As in base Buzz, mention autocomplete, the
 mention picker and member-add omit archived identities: fail-open while the
 snapshot is unknown, never hiding the viewer from themself, and never touching
 history or channel membership. The sidebar also omits a one-to-one DM when its
-single other participant is known archived and its row is read. An unread DM stays
-visible until read; a new unread message restores it. This preserves group DMs, open views,
+single other participant is known archived and its messages are read. Opening the
+DM alone does not read them; an unread DM stays visible until read, and a new
+unread message restores it. This preserves group DMs, open views,
 search access and independent manual hiding. Unarchive restores its row when
 Buzz reconnects or restarts and refreshes the evidence. Unknown startup evidence
 remains fail-open, so an archived row may appear before the initial read completes.

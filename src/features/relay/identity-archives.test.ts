@@ -178,6 +178,25 @@ it("reconciles an active read completed during an outage on reconnect", async ()
   expect(h.archives.state(target.pubkey)).toBe("not-archived");
   expect(h.query).toHaveBeenCalledTimes(2);
 });
+it("rereads once after an in-flight read is released across reconnect", async () => {
+  const h = harness();
+  h.live.state({ status: "connected", routes: [] });
+  const first = h.archives.ensure({ background: true });
+  const held = h.wire.next();
+  h.live.state({ status: "retrying", routes: [] });
+  h.live.state({ status: "connected", routes: [] });
+  expect(h.archives.snapshot().status).toBe("loading");
+  held.respond([snapshot()]);
+  await first;
+  expect(h.archives.state(target.pubkey)).toBe("archived");
+  expect(h.query).toHaveBeenCalledTimes(1);
+  const reconciled = h.archives.ensure({ background: true });
+  h.wire.next().respond([snapshot(2, [])]);
+  await reconciled;
+  expect(h.archives.state(target.pubkey)).toBe("not-archived");
+  expect(h.archives.snapshot().status).toBe("ready");
+  expect(h.query).toHaveBeenCalledTimes(2);
+});
 it.each(["sidebar", "active"] as const)(
   "keeps %s recovery demand through a socket drop",
   async (demand) => {

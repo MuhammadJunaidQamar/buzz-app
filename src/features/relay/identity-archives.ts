@@ -81,6 +81,8 @@ export function createIdentityArchives(
   let closed = false;
   // Recovery may defer sidebar work; active consumers can claim the same read.
   let backgroundRead = false;
+  // A read that crossed a reconnect may predate a change; ensure rereads once.
+  let owed = false;
   let controller: AbortController | undefined;
   let pending: Promise<void> | undefined;
   // Keep only the ordering fence across cache clears; never revive old contents.
@@ -99,6 +101,7 @@ export function createIdentityArchives(
     // An active consumer also claims recovery of an already failed read.
     if (!background) backgroundRead = false;
     if (pending) return pending;
+    owed = false;
     backgroundRead = background;
     const owned = new AbortController();
     controller = owned;
@@ -332,6 +335,7 @@ export function createIdentityArchives(
     return closed || !available ? "unavailable" : "idle";
   }
   function stopRead() {
+    owed = false;
     controller?.abort();
     controller = undefined;
     pending = undefined;
@@ -341,9 +345,14 @@ export function createIdentityArchives(
     publish({ status: stop(), archived: empty });
   }
   /** Reconnect retires settled evidence, retaining visibility. A finite HTTP
-   * read already in flight may finish; failures retain their recovery deadline. */
+   * read already in flight may finish; the next ensure() then rereads once.
+   * Failures retain their recovery deadline. */
   function stale() {
-    if (pending || snapshot.transient) return;
+    if (pending) {
+      owed = true;
+      return;
+    }
+    if (snapshot.transient) return;
     const { error: _, transient: __, retryAt: ___, ...known } = snapshot;
     publish({
       ...known,
@@ -363,7 +372,8 @@ export function createIdentityArchives(
       state,
       ensure: ({ background = false }: { background?: boolean } = {}) => {
         if (!background) backgroundRead = false;
-        if (snapshot.status !== "idle") return pending ?? Promise.resolve();
+        if (pending) return pending;
+        if (snapshot.status !== "idle" && !owed) return Promise.resolve();
         return refresh(background);
       },
       refresh: () => refresh(),

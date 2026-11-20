@@ -68,7 +68,7 @@ import {
   type RegisteredSidebarRows,
 } from "../../features/channel-navigation/sidebar-rows-service";
 import { useSidebarRowUnread } from "../../features/channel-navigation/useSidebarRowUnread";
-import { rowUnread as channelRowUnread } from "../../features/relay/unread";
+import type { UnreadSnapshot } from "../../features/relay/unread";
 import type { SidebarSortMode } from "../../features/relay/sidebar-sort";
 import type { SidebarFrame } from "../../features/channel-navigation/SidebarFrame";
 import { Button } from "../../shared/design-system/ui/Button";
@@ -149,6 +149,11 @@ import { splitPartition } from "../../features/relay/partition";
 import styles from "./Channels.module.css";
 import { avatarMedia } from "../../shared/avatar-source";
 import { useBestieConversation } from "../../app/shell/bestie-context";
+
+// Opening a DM quiets its row before read dwell; messages remain unread.
+function conversationUnread(snapshot: UnreadSnapshot) {
+  return snapshot.manual !== "none" || (snapshot.observedCount ?? 0) > 0;
+}
 
 /** The sidebar entry selected by a destination, excluding nested message state. */
 function sidebarEntryLocation(target: OpenTarget) {
@@ -457,14 +462,12 @@ export function ChannelInventory({
             channel.participants?.length === 1 &&
             channel.participants[0] !== viewer &&
             archivedKeys.has(channel.participants[0] ?? "") &&
-            !channelRowUnread(
+            !conversationUnread(
               archivedDmUnread.get(channel.id) ??
                 queries.unread.snapshot({
                   kind: "channel",
                   channelId: channel.id,
                 }),
-              true,
-              false,
             )
           ) &&
           (channel.channelType !== "solo" ||

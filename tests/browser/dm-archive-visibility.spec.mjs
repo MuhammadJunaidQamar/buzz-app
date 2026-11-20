@@ -1,6 +1,7 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 import { animationsSettled } from "./animations.mjs";
+import { readJournal } from "./reading.mjs";
 
 test.use({
   productionBroker: true,
@@ -36,6 +37,10 @@ test("archived one-to-one DMs leave the sidebar while history and open drafts su
   await expect(history).toContainText("Preserved DM history");
   const composer = conversation.getByRole("textbox", { name: /^Message / });
   await composer.fill("Keep this draft");
+  // Archive evidence hides only a read DM; earn the real read first.
+  const readThrough = async () =>
+    (await readJournal(page))?.state.frontiers["dm-peer"] ?? 0;
+  await expect.poll(readThrough).toBeGreaterThanOrEqual(old.created_at);
 
   const archiveReads = () =>
     app.report.queries.filter(({ filter }) => filter.kinds?.includes(13535))
@@ -162,10 +167,22 @@ test("archived one-to-one DMs leave the sidebar while history and open drafts su
   await refresh([app.participants[0]]);
   await expect(dm).toBeVisible();
   await expect(dm.locator("[data-channel-unread]")).toBeVisible();
+  // Opening quiets the row at once, but leaving before read dwell must keep
+  // the still-unread DM reachable. Pause time so dwell cannot elapse.
+  const arrival = conversation.locator(`[data-message-id="${incoming.id}"]`);
+  const base = Date.now();
+  await page.clock.install({ time: base });
+  await page.clock.pauseAt(base + 1_000);
   await dm.click();
-  await expect(
-    conversation.locator(`[data-message-id="${incoming.id}"]`),
-  ).toContainText("Unread from archived Alice");
+  await expect(arrival).toContainText("Unread from archived Alice");
+  await sidebar.locator('[data-channel-id="alpha"]').click();
+  await expect(arrival).toHaveCount(0);
+  await page.clock.resume();
+  await expect(dm).toBeVisible();
+  expect(await readThrough()).toBeLessThan(incoming.created_at);
+  await dm.click();
+  await expect(arrival).toContainText("Unread from archived Alice");
+  await expect.poll(readThrough).toBeGreaterThanOrEqual(incoming.created_at);
   await expect(dm).toHaveCount(0);
   expect(app.histories.get("primary/dm-peer")).toContainEqual(old);
   expect(

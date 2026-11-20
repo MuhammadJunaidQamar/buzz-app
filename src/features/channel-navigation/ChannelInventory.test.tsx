@@ -631,6 +631,37 @@ it("lets an in-flight sidebar read finish during an outage and reconciles on rec
   expect(f.session.archives.snapshot().archived).toEqual([]);
 });
 
+it("rereads after an old sidebar response is released across reconnect", async () => {
+  const f = transportArchivedDmFixture(true);
+  f.state("connected");
+  render(f.view("active"));
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("ready"),
+  );
+  await waitFor(() => expect(f.row("retired")).toBeNull());
+  const old = f.archiveSnapshot();
+  let finish!: (events: (typeof old)[]) => void;
+  f.read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  f.state("retrying");
+  f.state("connected");
+  await waitFor(() =>
+    expect(f.session.archives.snapshot().status).toBe("loading"),
+  );
+  const before = f.read.mock.calls.length;
+  f.state("retrying");
+  f.state("connected");
+  f.setArchived(false);
+  await act(async () => finish([old]));
+  await waitFor(() => expect(f.row("retired")).not.toBeNull());
+  expect(f.read).toHaveBeenCalledTimes(before + 1);
+  expect(f.session.archives.snapshot().archived).toEqual([]);
+});
+
 it("keeps the pending reconnect archive read through an unrelated roster revocation", async () => {
   const f = transportArchivedDmFixture(true);
   f.state("connected");
@@ -709,7 +740,7 @@ it("keeps archive filtering independent from manual hiding", async () => {
   expect(f.row("retired")).toBeNull();
 });
 
-it("shows an archived DM while its sidebar row is unread and hides it when read", async () => {
+it("shows an archived DM while its conversation is unread and hides it when read", async () => {
   const f = archivedDmFixture(true);
   const original = f.session.unread;
   const target = { kind: "channel" as const, channelId: "retired" };
@@ -741,21 +772,17 @@ it("shows an archived DM while its sidebar row is unread and hides it when read"
     expect(f.session.archives.snapshot().status).toBe("ready"),
   );
   expect(f.row("retired")).not.toBeNull();
-  act(() => {
-    state = {
-      ...state,
-      row: { observedCount: 0, attentionCount: 0, threadCount: 0 },
-    };
-    for (const listener of listeners) listener();
-  });
+  const update = (next: Partial<UnreadSnapshot>) =>
+    act(() => {
+      state = { ...state, ...next };
+      for (const listener of listeners) listener();
+    });
+  // Opening the DM quiets its row; leaving before read dwell keeps it unread.
+  update({ row: { observedCount: 0, attentionCount: 0, threadCount: 0 } });
+  expect(f.row("retired")).not.toBeNull();
+  update({ observedCount: 0, attentionCount: 0 });
   await waitFor(() => expect(f.row("retired")).toBeNull());
-  act(() => {
-    state = {
-      ...state,
-      row: { observedCount: 1, attentionCount: 1, threadCount: 0 },
-    };
-    for (const listener of listeners) listener();
-  });
+  update({ observedCount: 1, attentionCount: 1 });
   await waitFor(() => expect(f.row("retired")).not.toBeNull());
 });
 
