@@ -668,7 +668,7 @@ export function SoloWorkspaces({
         {(overflow) => (
           <NavigationSectionHeading
             disclosure
-            revealActions
+            revealActions={trailing ? "in-flow" : true}
             trailing={
               trailing && {
                 metadata: trailing.metadata,
@@ -688,13 +688,11 @@ export function SoloWorkspaces({
               <>
                 {trailing?.hasInteractiveDecoration && newTask}
                 {overflow}
-                {(trailing?.metadata == null ||
-                  typeof trailing.metadata === "boolean") && (
+                {!trailing && (
                   <>
                     {project.id &&
                       workspaceComposition?.newAction(project.id, project.name)}
-                    {newTask == null &&
-                      onNew &&
+                    {onNew &&
                       !workspaceComposition &&
                       (!compose || !project.id) && (
                         <IconButton

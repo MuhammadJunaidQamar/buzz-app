@@ -70,14 +70,6 @@
   }
 }
 @container solo-workspace-header (max-width: 9rem) {
-  .workspaceHeader > [class~="navigation-section-heading"] {
-    flex-wrap: wrap;
-  }
-  .workspaceHeader [class~="navigation-section-heading-label"] {
-    flex-basis: 100%;
-  }
-}
-@container solo-workspace-header (max-width: 9rem) {
   .workspaceHeader
     [data-solo-workspace-new-task]:not(
       [data-has-metadata] *,

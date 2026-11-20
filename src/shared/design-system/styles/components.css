@@ -1854,8 +1854,13 @@
       inset-inline-end: 0;
     }
 
-    /* An overlay in a metadata slot keeps its slot-only hover behavior. */
+    /* In-flow actions can replace metadata from anywhere on the heading. */
     :is(
+        .navigation-section-heading:hover
+          > .navigation-section-heading-trailing
+          > .navigation-section-heading-actions[data-has-metadata]:has(
+            > [data-navigation-reveal="in-flow"]
+          ),
         .navigation-section-heading-actions[data-has-metadata]:hover,
         .navigation-section-heading-actions[data-has-metadata]:focus-within,
         .navigation-section-heading-actions[data-has-metadata]:has(
@@ -1865,8 +1870,6 @@
           > .navigation-section-heading
           > .navigation-section-heading-trailing
           > [data-has-metadata]
-      ):has(
-        > .navigation-section-heading-buttons[data-navigation-reveal="true"]
       ) {
       > [data-navigation-reveal] {
         opacity: 1;
@@ -1891,8 +1894,7 @@
         [data-context-menu-present] > .navigation-section-heading
       ) {
       [data-navigation-reveal]:not(
-          [data-has-metadata]
-            > .navigation-section-heading-buttons[data-navigation-reveal="true"]
+          [data-has-metadata] > .navigation-section-heading-buttons
         ) {
         opacity: 1;
 
@@ -1900,13 +1902,6 @@
         &.navigation-section-heading-buttons {
           pointer-events: auto;
         }
-      }
-
-      .navigation-section-heading-actions[data-has-metadata]:has(
-          > .navigation-section-heading-buttons[data-navigation-reveal="in-flow"]
-        )
-        > [data-navigation-reveal-rest] {
-        visibility: hidden;
       }
     }
   }

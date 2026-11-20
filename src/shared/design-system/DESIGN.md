@@ -541,10 +541,11 @@ Use `disclosure` when the label is the feature's own collapse trigger, and
 `revealActions` or `data-navigation-reveal` for quiet parts such as the chevron.
 On pointer devices, quiet actions reveal with the heading and can overlay its
 trailing edge. Use in-flow reveal when actions need to stay clear of the title
-or accessory. In-flow actions keep their size when hidden. When the trailing
-metadata owns an overlay, the actions appear on slot hover or focus and may
-overlay an adjacent accessory. Touch keeps actions and accessories side by
-side. Keep the trailing slot mounted when metadata changes.
+or accessory. In-flow actions keep their size when hidden and replace passive
+metadata on heading hover. When the trailing metadata owns an overlay, the
+actions appear on slot hover or focus and may overlay an adjacent accessory.
+Touch keeps actions and accessories side by side. Keep the trailing slot
+mounted when metadata changes.
 When a host already names a list, as
 the sidebar's Team and Solo tabs do, omit its heading rather than hiding or
 overlaying it; any actions it still needs take a headingless heading row.
