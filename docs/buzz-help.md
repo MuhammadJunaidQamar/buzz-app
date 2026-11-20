@@ -396,8 +396,8 @@ Quitting Buzz also turns it off.
 - In the fullscreen video viewer, comments and emoji reactions at the current
   frame stay attached to that video when you move through a thread's media.
 - A video's speed control opens a menu of playback speeds. Option-click
-  (Alt-click) it to switch straight to 2x from normal speed, or back to 1x
-  from any other speed.
+  (Alt-click) it to toggle the speed instead of picking from the menu: 2x
+  from normal speed, or back to 1x from any other speed.
 - Right-click an uploaded image to **Copy image**, **Copy image URL**, or
   **Download image**. Videos offer **Copy video URL** and **Download video**.
   **Open image** or **Open video** opens the preview in the fullscreen gallery.
