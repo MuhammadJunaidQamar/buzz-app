@@ -147,7 +147,7 @@ function DocumentFormattingToolbar({
 }) {
   const present = useIsPresent();
   const instant: boolean = usePresenceData();
-  const hidden = { opacity: 0, y: instant ? 0 : 4 };
+  const hidden = { opacity: 0, y: instant ? "0rem" : "0.75rem" };
   return (
     <div className={styles.toolbarAnchor}>
       <motion.fieldset
@@ -157,11 +157,11 @@ function DocumentFormattingToolbar({
         aria-hidden={!present || undefined}
         inert={!present}
         initial={hidden}
-        animate={{ opacity: 1, y: 0 }}
+        animate={{ opacity: 1, y: "0rem" }}
         exit={hidden}
         transition={{
-          duration: instant ? 0 : 0.14,
-          ease: [0.23, 1, 0.32, 1],
+          duration: instant ? 0 : 0.22,
+          ease: [0.645, 0.045, 0.355, 1],
         }}
       >
         {children}
@@ -325,7 +325,7 @@ export function DocumentEditor({
     (typeof document !== "undefined" &&
       document.documentElement.hasAttribute("data-keyboard-navigation"));
   const toolbar = (
-    <AnimatePresence initial={false} custom={instant}>
+    <AnimatePresence custom={instant}>
       {showFormatting && (
         <DocumentFormattingToolbar surfaceRef={toolbarSurface}>
           <ComposerFormattingTools
