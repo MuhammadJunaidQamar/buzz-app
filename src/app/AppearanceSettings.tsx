@@ -104,6 +104,8 @@ export function AppearanceSettings({
     error,
     messageWidth,
     messageWidthError,
+    wrapMessageTables,
+    wrapMessageTablesError,
     fontScale,
     fontError,
     accent,
@@ -370,6 +372,12 @@ export function AppearanceSettings({
         </SettingsGroup>
         <div className="mt-4">
           <SettingsGroup>
+            <SwitchPreferenceRow
+              label="Wrap text in message tables"
+              description="Wide tables can still scroll sideways."
+              checked={wrapMessageTables}
+              onCheckedChange={appearance.setWrapMessageTables}
+            />
             <PreferenceRow
               title="Message timestamps"
               subtitle="Hidden times stay available to screen readers."
@@ -500,6 +508,19 @@ export function AppearanceSettings({
               onClick={() => appearance.setMessageWidth(messageWidth)}
             >
               Retry saving message width
+            </Button>
+          </ToastNotice>
+        )}
+        {active && wrapMessageTablesError && (
+          <ToastNotice
+            title="Table wrapping preference wasn’t saved"
+            description={wrapMessageTablesError}
+          >
+            <Button
+              size="sm"
+              onClick={() => appearance.setWrapMessageTables(wrapMessageTables)}
+            >
+              Retry saving table wrapping
             </Button>
           </ToastNotice>
         )}
