@@ -222,7 +222,7 @@ test("Team offers empty-workspace creation with keyboard focus, emoji and confir
   lostResponse = false;
   failWriterRead = true;
   await page.route("**/sidebar-assignment", loseCreationResponse);
-  await trigger.click();
+  await clickSidebarHeadingAction(trigger);
   await page
     .getByRole("menuitem", { name: "Create workspace", exact: true })
     .click();
@@ -256,7 +256,7 @@ test("Team offers empty-workspace creation with keyboard focus, emoji and confir
     .click();
   await expect(trigger).toBeFocused();
   await expect(accepted).toBeVisible();
-  await trigger.click();
+  await clickSidebarHeadingAction(trigger);
   await page
     .getByRole("menuitem", { name: "Create workspace", exact: true })
     .click();
