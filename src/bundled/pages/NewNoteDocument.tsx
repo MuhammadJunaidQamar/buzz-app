@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { noteKey, type Note } from "./model";
 import type { NotesWorkspace } from "./workspace";
-import { DotsThreeIcon, ShareIcon } from "../../shared/design-system/icons";
+import { DotsThreeIcon } from "../../shared/design-system/icons";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import {
   MenuRoot,
@@ -37,19 +37,12 @@ export function NewNoteDocument({
   initial: NewDraft;
   active: boolean;
   onDraftChange(draft: NewDraft): void;
-  onCreated(
-    note: Note,
-    presentation: {
-      focus?: NoteFocus | undefined;
-      share: boolean;
-    },
-  ): void;
+  onCreated(note: Note, focus: NoteFocus | undefined): void;
 }) {
   const [title, setTitle] = useState(initial.title);
   const [markdown, setMarkdown] = useState(initial.markdown);
   const [source, setSource] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
-  const [share, setShare] = useState(false);
   const [composing, setComposing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [accepted, setAccepted] = useState<{
@@ -111,29 +104,25 @@ export function NewNoteDocument({
           : selection
             ? { target: "body", ...selection }
             : undefined;
-      callbacks.current.onCreated(note, {
-        focus: share ? undefined : focus,
-        share,
-      });
+      callbacks.current.onCreated(note, focus);
     };
     // Creation replaces this editor. Wait again if typing resumed in flight.
     const remaining = AUTO_SAVE_IDLE_MS - (Date.now() - lastEditAt.current);
-    if (share || lastEditAt.current === editAtStart || remaining <= 0)
-      return handOff();
+    if (lastEditAt.current === editAtStart || remaining <= 0) return handOff();
     const timer = window.setTimeout(handOff, remaining);
     return () => window.clearTimeout(timer);
-  }, [accepted, composing, linkOpen, title, markdown, workspace, share]);
+  }, [accepted, composing, linkOpen, title, markdown, workspace]);
   useEffect(() => {
     if (!dirty) return;
     const prevent = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", prevent);
     return () => window.removeEventListener("beforeunload", prevent);
   }, [dirty]);
-  const save = async (force = false) => {
+  const save = async () => {
     if (
       pending.current ||
       accepted ||
-      (!dirty && !attempt.current && !force) ||
+      (!dirty && !attempt.current) ||
       composing
     )
       return;
@@ -253,15 +242,6 @@ export function NewNoteDocument({
           >
             Retry save
           </NoteSaveAction>
-          <IconButton
-            aria-label="Share doc"
-            title="Share doc"
-            icon={<ShareIcon size={16} />}
-            onClick={() => {
-              setShare(true);
-              void save(true);
-            }}
-          />
           <MenuRoot>
             <MenuTrigger
               render={

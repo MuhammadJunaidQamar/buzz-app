@@ -1204,11 +1204,11 @@ trashed docs. Select the **Trash** chip in the search bar to return to the main 
 The list and open docs check for edits automatically. If **Refresh docs** or
 **Refresh doc** appears, use it to check again.
 
-Open **Share doc** to grant access or choose **Copy link**. New docs are private;
-View only allows community members to read. A link grants no access. Sharing
-includes retained revisions, and the relay operator can read content. Doc
-actions offers revision history with each revision’s author and avatar. Use
-**Move to Trash** to hide a doc from the main list. A doc in Trash shows its
+New docs are private. After the first save, open **Share doc** to grant access
+or choose **Copy link**. View only allows community members to read. A link
+grants no access. Sharing includes retained revisions, and the relay operator
+can read content. Doc actions offers revision history with each revision’s
+author and avatar. Use **Move to Trash** to hide a doc from the main list. A doc in Trash shows its
 title with “(in Trash)”. Readers can view earlier versions under **Doc actions →
 Revision history**. Editors can choose **Restore** or restore a specific version
 from the revision preview.

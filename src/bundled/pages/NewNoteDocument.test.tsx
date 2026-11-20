@@ -53,6 +53,7 @@ async function fixture(initial: Partial<NewDraft> = {}) {
 it("opens a fresh editor without allocating storage, then auto-saves after idle", async () => {
   const f = await fixture();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Share doc" })).toBeNull();
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
   await advance(16);
   expect(f.title).toHaveFocus();
@@ -129,8 +130,7 @@ it.each(["typing", "composition"])(
       expect(f.title).toHaveFocus();
       await advance(1);
       expect(f.onCreated).toHaveBeenCalledOnce();
-      const [note, presentation] = f.onCreated.mock.calls[0] ?? [];
-      const focus = presentation.focus;
+      const [note, focus] = f.onCreated.mock.calls[0] ?? [];
       expect(f.workspace.drafts.get(noteKey(note))?.title).toBe("Still typing");
       expect(focus).toMatchObject({ target: "title", start: 2, end: 5 });
     } finally {
@@ -190,22 +190,6 @@ it("defers first save while a draft is hidden or the user is still typing", asyn
   await f.finishCreate();
   expect(f.create).toHaveBeenCalledOnce();
   expect(f.create.mock.calls[0]?.[0].title).toBe("Plan 11");
-});
-
-it("creates a private empty page when Share is explicitly requested", async () => {
-  const f = await fixture();
-  f.unavailableInventory();
-  fireEvent.click(screen.getByRole("button", { name: "Share doc" }));
-  await f.finishCreate();
-  const [note, presentation] = f.onCreated.mock.calls[0] ?? [];
-  expect(presentation).toMatchObject({ share: true });
-  expect(f.channels.get(note.channel)?.roles).toEqual({
-    [f.viewer.pubkey]: "owner",
-  });
-  expect(f.create.mock.calls[0]?.[0]).toMatchObject({
-    title: "Untitled doc",
-    markdown: "",
-  });
 });
 
 it("cancels first-save authority when the creation surface unmounts", async () => {

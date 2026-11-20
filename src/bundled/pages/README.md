@@ -14,10 +14,10 @@ filter in Docs.
 Edits save automatically after a pause. Use Retry save after a failed save.
 Browsing within Docs retains unsaved drafts for the connected session. Unsaved work is not a synced or permanent backup.
 
-Share doc controls membership and general access. New docs are private. View only
-lets community members read, while editors can change content. Links grant no
-access. Sharing includes retained revisions, and the relay operator can read the
-content; Docs is not end-to-end encrypted.
+New docs are private. After the first save, use Share doc to manage membership and
+general access. View only lets community members read, while editors can change
+content. Links grant no access. Sharing includes retained revisions, and the
+relay operator can read the content. Docs is not end-to-end encrypted.
 
 Doc actions also provides Markdown source, retained revisions and **Move to
 Trash**. Restore creates a new current revision while retaining history.

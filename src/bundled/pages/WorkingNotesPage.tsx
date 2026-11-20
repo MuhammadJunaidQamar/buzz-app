@@ -48,7 +48,6 @@ import {
   workingRoute,
   workingTarget,
   type WorkingRoute,
-  type DocumentView,
 } from "./working-route";
 
 export type NotesOwner = (session: RelaySession) => NotesWorkspace;
@@ -243,17 +242,12 @@ export function WorkingNotesCommunity({
     },
     [navigator, request],
   );
-  const open = (
-    address: NoteAddress,
-    replace = false,
-    dialog?: DocumentView["dialog"],
-  ) => {
+  const open = (address: NoteAddress, replace = false) => {
     reveal(address);
     visit(
       {
         view: "page",
         ...noteAddress(address),
-        ...(dialog ? { dialog } : {}),
         query,
         trash,
       },
@@ -405,13 +399,13 @@ export function WorkingNotesCommunity({
                 initial={draft}
                 active={selected === `new:${draft.id}`}
                 onDraftChange={(next) => drafts.current.set(next.id, next)}
-                onCreated={(note, { focus, share }) => {
+                onCreated={(note, focus) => {
                   if (focus) createdFocus.current.set(noteKey(note), focus);
                   createdDrafts.current.set(draft.id, noteAddress(note));
                   drafts.current.delete(draft.id);
                   changed(note);
                   if (selectedRef.current === `new:${draft.id}`)
-                    open(note, true, share ? "share" : undefined);
+                    open(note, true);
                 }}
               />
             ),
