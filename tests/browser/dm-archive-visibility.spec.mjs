@@ -65,12 +65,14 @@ test("archived one-to-one DMs leave the sidebar while history and open drafts su
   const started = Promise.withResolvers();
   const released = Promise.withResolvers();
   const completed = Promise.withResolvers();
+  let heldReads = 0;
   const holdArchive = async (route) => {
     const archive = route
       .request()
       .postDataJSON()
       .some((filter) => filter.kinds?.includes(13535));
     if (archive) {
+      heldReads++;
       started.resolve();
       await released.promise;
     }
@@ -90,11 +92,14 @@ test("archived one-to-one DMs leave the sidebar while history and open drafts su
     });
   });
   await page.route("**/api/relay/primary/query", holdArchive);
+  const beforeRevocation = archiveReads();
   try {
-    app.removeViewer("beta");
+    app.relay.disconnect("primary");
     await started.promise;
+    app.removeViewer("beta");
     await expect(sidebar.locator('[data-channel-id="beta"]')).toHaveCount(0);
     await expect(dm).toHaveCount(0);
+    expect(heldReads).toBe(1);
     expect(await page.evaluate(() => window.archivedDmAppeared)).toBe(false);
   } finally {
     released.resolve();
@@ -102,6 +107,9 @@ test("archived one-to-one DMs leave the sidebar while history and open drafts su
     await page.unroute("**/api/relay/primary/query", holdArchive);
     await page.evaluate(() => window.archiveRowObserver.disconnect());
   }
+  await expect.poll(archiveReads).toBe(beforeRevocation + 1);
+  await expect.poll(() => app.relay.hasRoute("primary", "dm-peer")).toBe(true);
+  expect(archiveReads()).toBe(beforeRevocation + 1);
 
   // Reopening history from search must not override archive presentation.
   await sidebar.locator('[data-channel-id="alpha"]').click();
@@ -178,17 +186,17 @@ test("archive visibility recovers after HTTP retries exhaust on a live connectio
   await expect(dm).toHaveCount(0);
   const primarySockets = () =>
     app.relay.sockets.filter((socket) => socket.community === "primary");
-  const sockets = primarySockets().length;
   const before = await page.evaluate(() => {
     window.archiveOutage.failing = true;
     return window.archiveOutage.attempts;
   });
   app.setArchivedIdentities([]);
-  app.removeViewer("beta");
-  await expect(sidebar.locator('[data-channel-id="beta"]')).toHaveCount(0);
+  app.relay.disconnect("primary");
+  await expect.poll(() => app.relay.hasRoute("primary", "dm-peer")).toBe(true);
   await expect
     .poll(() => page.evaluate(() => window.archiveOutage.attempts))
     .toBeGreaterThanOrEqual(before + 5);
+  const sockets = primarySockets().length;
   await expect(dm).toHaveCount(0);
   await page.evaluate(() => {
     window.archiveOutage.failing = false;

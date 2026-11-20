@@ -264,34 +264,26 @@ it("rejects rollback across refresh, failure and cache clear; permits the same h
   await read(h, [snapshot(6)]);
   expect(h.archives.snapshot().createdAt).toBe(6);
 });
-it.each(["cache", "disconnect", "access", "dispose"] as const)(
-  "%s invalidation fences late results; channel access and disconnect keep relay-wide visibility",
+it.each(["cache", "dispose"] as const)(
+  "%s invalidation fences late results and discards archive visibility",
   async (action) => {
     const h = harness();
     h.live.state({ status: "connected", routes: [] });
-    if (action === "access")
-      h.live.receive([roster(relay, "room", [viewer.pubkey], 1)]);
     await read(h, [snapshot()]);
-    const { readAt } = h.archives.snapshot();
     const pending = h.archives.refresh();
     const req = h.wire.next();
     if (action === "cache") await h.clearCache();
-    else if (action === "disconnect")
-      h.live.state({ status: "retrying", routes: [] });
-    else if (action === "access")
-      h.live.receive([roster(relay, "room", [], 2)]);
     else h.dispose();
     expect(req.signal?.aborted).toBe(true);
-    const kept = action === "disconnect" || action === "access";
-    expect(archiveHides(h.archives, target.pubkey, viewer.pubkey)).toBe(kept);
+    expect(archiveHides(h.archives, target.pubkey, viewer.pubkey)).toBe(false);
     expect(h.archives.state(target.pubkey)).toBe("unknown");
     req.respond([snapshot(2)]);
     await pending;
     expect(h.archives.snapshot()).toMatchObject({
       status: action === "dispose" ? "unavailable" : "idle",
-      archived: kept ? [target.pubkey] : [],
+      archived: [],
     });
-    expect(h.archives.snapshot().readAt).toBe(kept ? readAt : undefined);
+    expect(h.archives.snapshot().readAt).toBeUndefined();
     if (action === "dispose") {
       // Closing is not lack of support: callers must not read it as "none".
       expect(h.archives.supported).toBe(true);
@@ -381,6 +373,113 @@ function writable(fixture: ReturnType<typeof archiveRelay>) {
   owners.push(owner);
   return owner.session.archives;
 }
+it.each(
+  (["archive", "unarchive"] as const).flatMap((action) =>
+    (["consent", "sign", "confirmation"] as const).map((phase) => ({
+      action,
+      phase,
+    })),
+  ),
+)(
+  "socket transitions preserve $action during $phase over healthy HTTP",
+  async ({ action, phase }) => {
+    const fixture = archiveRelay(viewer, relay, [attested(target, viewer)]);
+    if (action === "unarchive") fixture.archiveExternally(target.pubkey);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: (signal: AbortSignal | undefined) => void;
+    const entered = new Promise<AbortSignal | undefined>((resolve) => {
+      started = resolve;
+    });
+    const writer = fixture.transport.identityArchive;
+    if (!writer) throw new Error("fixture writer");
+    const sign = writer.sign.bind(writer);
+    writer.sign = async (template, signal) => {
+      if (phase === "sign") {
+        started(signal);
+        await gate;
+      }
+      return sign(template, signal);
+    };
+    let live!: LiveCallbacks;
+    const owner = createRelaySession({
+      ...fixture.transport,
+      async query(filters, signal, ...rest) {
+        if (
+          (phase === "consent" &&
+            filters.some((f) => f.kinds?.includes(13534))) ||
+          (phase === "confirmation" &&
+            filters.some((f) => f.kinds?.includes(13535)))
+        ) {
+          started(signal);
+          await gate;
+        }
+        return fixture.transport.query(filters, signal, ...rest);
+      },
+      subscribe(callbacks) {
+        live = callbacks;
+        return { update() {}, retry() {}, dispose() {} };
+      },
+    });
+    owners.push(owner);
+    live.state({ status: "connected", routes: [] });
+    live.state({ status: "retrying", routes: [] });
+    const outcome = owner.session.archives.request(action, target.pubkey).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    const signal = await entered;
+    try {
+      live.state({ status: "connected", routes: [] });
+      expect(signal?.aborted).toBe(false);
+      live.state({ status: "retrying", routes: [] });
+      expect(signal?.aborted).toBe(false);
+    } finally {
+      release();
+    }
+    expect(await outcome).toBeUndefined();
+    expect(fixture.published).toHaveLength(1);
+    expect(owner.session.archives.state(target.pubkey)).toBe(
+      action === "archive" ? "archived" : "not-archived",
+    );
+  },
+);
+
+it("an active ensure reads healthy HTTP while sidebar demand waits for the socket", async () => {
+  const h = harness();
+  h.live.state({ status: "connected", routes: [] });
+  h.live.state({ status: "retrying", routes: [] });
+  await h.archives.ensure({ background: true });
+  expect(h.query).not.toHaveBeenCalled();
+  const active = h.archives.ensure();
+  const req = h.wire.next();
+  h.live.state({ status: "connected", routes: [] });
+  expect(req.signal?.aborted).toBe(false);
+  req.respond([snapshot()]);
+  await active;
+  expect(h.archives.state(target.pubkey)).toBe("archived");
+  expect(h.query).toHaveBeenCalledTimes(1);
+});
+
+it("channel-only revocation preserves the pending relay-wide archive read", async () => {
+  const h = harness();
+  h.live.state({ status: "connected", routes: [] });
+  h.live.receive([roster(relay, "room", [viewer.pubkey], 1)]);
+  const pending = h.archives.ensure();
+  const req = h.wire.next();
+  h.live.receive([roster(relay, "room", [], 2)]);
+  expect(req.signal?.aborted).toBe(false);
+  req.respond([snapshot()]);
+  await pending;
+  expect(h.archives.state(target.pubkey)).toBe("archived");
+  expect(
+    h.query.mock.calls.filter(([filters]) =>
+      filters.some((f) => f.kinds?.includes(13535)),
+    ),
+  ).toHaveLength(1);
+});
 it("owner path attaches the target's exact live auth tag and confirms by re-read", async () => {
   const head = attested(target, viewer);
   const fixture = archiveRelay(viewer, relay, [head]);

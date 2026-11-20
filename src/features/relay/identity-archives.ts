@@ -82,6 +82,7 @@ export function createIdentityArchives(
   // Keep connection scheduling private: consumers still see idle as pending.
   let paused = false;
   let demanded = false;
+  let backgroundRead = false;
   let controller: AbortController | undefined;
   let pending: Promise<void> | undefined;
   // Keep only the ordering fence across cache clears; never revive old contents.
@@ -95,9 +96,12 @@ export function createIdentityArchives(
     snapshot = Object.freeze(next);
     for (const listener of listeners) notify(listener);
   }
-  function refresh(): Promise<void> {
+  function refresh(background = false): Promise<void> {
     if (closed || !available || !authority) return Promise.resolve();
+    // An active consumer can join an automatic read and keep it across a drop.
+    if (!background) backgroundRead = false;
     if (pending) return pending;
+    backgroundRead = background;
     const owned = new AbortController();
     controller = owned;
     let finish!: () => void;
@@ -326,26 +330,27 @@ export function createIdentityArchives(
   }
   function stop() {
     for (const owned of requests) owned.abort();
+    stopRead();
+    return closed || !available ? "unavailable" : "idle";
+  }
+  function stopRead() {
     controller?.abort();
     controller = undefined;
     pending = undefined;
-    return closed || !available ? "unavailable" : "idle";
   }
   /** Forgets known visibility on full cache clear or session retirement. */
   function clear() {
     publish({ status: stop(), archived: empty });
   }
-  /** Invalidates freshness and in-flight work; relay-wide visibility stays
-   * known until the next ensure() replaces it. A paused ensure records demand
-   * for the connection owner to resume once. Never access evidence. */
-  function stale(next: "idle" | "paused" = paused ? "paused" : "idle") {
-    paused = next === "paused";
+  /** Retire snapshot freshness, retaining visibility. Mutations have their own
+   * caller/lifetime cancellation and do not depend on the live socket. */
+  function stale() {
+    stopRead();
     const { error: _, transient: __, retryAt: ___, ...known } = snapshot;
-    publish({ ...known, status: stop() });
-    if (!paused && demanded) {
-      demanded = false;
-      void refresh();
-    }
+    publish({
+      ...known,
+      status: closed || !available ? "unavailable" : "idle",
+    });
   }
   return {
     queries: Object.freeze({
@@ -358,13 +363,14 @@ export function createIdentityArchives(
         };
       },
       state,
-      ensure: () => {
+      ensure: ({ background = false }: { background?: boolean } = {}) => {
+        if (!background) backgroundRead = false;
         if (snapshot.status !== "idle") return pending ?? Promise.resolve();
-        if (!paused) return refresh();
+        if (!background || !paused) return refresh(background);
         demanded = true;
         return Promise.resolve();
       },
-      refresh,
+      refresh: () => refresh(),
       /** Whether this community advertises an archive authority; fixed per session. */
       supported: available,
       writable: !!writer,
@@ -372,7 +378,18 @@ export function createIdentityArchives(
       request,
     }),
     clear,
-    stale,
+    connected(value: boolean) {
+      paused = !value;
+      if (!value) {
+        if (!pending || backgroundRead) stale();
+      } else {
+        if (snapshot.status === "error") stale();
+        if (demanded) {
+          demanded = false;
+          if (snapshot.status === "idle") void refresh(true);
+        }
+      }
+    },
     dispose() {
       closed = true;
       clear();

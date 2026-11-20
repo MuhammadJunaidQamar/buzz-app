@@ -499,6 +499,22 @@ export function createRelaySession(
   ) {
     return isProfileRead(filters) && cleared === cacheClearEpoch;
   }
+  // Signed archive snapshots and role consent are relay-wide. Channel changes
+  // and live-socket outages cannot retire their independent HTTP/IPC reads.
+  const isArchiveFilter = (filter: ReadFilter) =>
+    !!transport?.archiveAuthority &&
+    filter.kinds?.length === 1 &&
+    (filter.kinds[0] === 13535 || filter.kinds[0] === 13534) &&
+    filter.authors?.length === 1 &&
+    filter.authors[0] === transport.archiveAuthority &&
+    Object.keys(filter).every((key) =>
+      ["kinds", "authors", "limit"].includes(key),
+    );
+  const isArchiveRead = (filters: readonly ReadFilter[]) =>
+    filters.some(isArchiveFilter) &&
+    filters.every(
+      (filter) => isArchiveFilter(filter) || isProfileFilter(filter),
+    );
   function revokeAccess(commit: () => void, ids?: readonly string[]) {
     revoking++;
     try {
@@ -519,7 +535,8 @@ export function createRelaySession(
           (filter) =>
             !isOwnerInventoryFilter(filter, transport?.viewer) &&
             !isOwnReadStateFilter(filter, transport?.viewer) &&
-            !isProfileFilter(filter),
+            !isProfileFilter(filter) &&
+            !isArchiveFilter(filter),
         );
       requests.invalidate(retired);
       retireBackoffs(retired);
@@ -541,9 +558,6 @@ export function createRelaySession(
       presence.clear();
       channelActivity.retain(canReadRemote);
       activityRosterKey = undefined;
-      // Archive visibility is relay-wide, independent of channel access.
-      // Retire in-flight work and freshness, retaining only that evidence.
-      archives.stale();
       workflows.clear();
       for (const purge of views.values()) purge();
       // The relay reapplies access to a new sync; nothing held survives.
@@ -4117,7 +4131,7 @@ export function createRelaySession(
         liveSnapshot.status !== "connected" &&
         (liveGeneration > 0 || archives.queries.snapshot().status === "error")
       )
-        archives.stale("idle");
+        archives.connected(true);
       if (
         snapshot.status !== "connected" &&
         liveSnapshot.status === "connected"
@@ -4131,10 +4145,10 @@ export function createRelaySession(
         catchups.clear();
         catchupQueue.clear();
         dropHintConfirmations();
-        requests.invalidate();
+        requests.invalidate((filters) => !isArchiveRead(filters));
         repositories.clearHomes();
         agentLibrary.clear();
-        archives.stale("paused");
+        archives.connected(false);
         workflows.interrupt();
         streamDropped = true;
         channels.staleHeads();

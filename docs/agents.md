@@ -1314,11 +1314,12 @@ active list. Invalid `p` keys are ignored and extra `p` elements have no semanti
 A successful snapshot replaces the entire list; newer timestamps / lower-id ties
 win. A session-local ordering fence survives cache clear, without retaining old
 archive contents; it is not persistent rollback protection across sessions/devices.
-Channel-access changes and disconnect invalidate freshness and cancel work while
-retaining relay-wide archive visibility. Explicit cache clear and session disposal
-discard it. Disconnect pauses reads privately while publishing idle evidence,
-so existing pending displays remain intact. Connection recovery resumes recorded
-demand once. First connection
+Channel-access changes preserve relay-wide archive evidence and its pending read.
+Explicit cache clear and session disposal discard it and cancel work. Disconnect
+retires background snapshot reads while retaining known visibility. Active reads,
+archive actions and their confirmation use HTTP or native IPC independently of
+the live socket. Only background sidebar demand waits for connection recovery,
+which resumes recorded demand once. First connection
 preserves a pending or successful startup read and retries a failed one.
 Transient failures also join the session's existing capped recovery backoff,
 respecting relay admission delays. Invalid snapshots and access refusals wait
@@ -1332,7 +1333,8 @@ snapshot is unknown, never hiding the viewer from themself, and never touching
 history or channel membership. The sidebar also omits a one-to-one DM when its
 single other participant is known archived, preserving group DMs, open views,
 search access and independent manual hiding. Unarchive restores its row when
-refreshed evidence arrives. `not-archived` means absent from the read snapshot, not online,
+refreshed evidence arrives. The sidebar demands a snapshot only when its roster
+contains an eligible one-to-one DM. `not-archived` means absent from the read snapshot, not online,
 owned, authorized or guaranteed current at a later write. Delta processing and
 packaged/live acceptance remain separate.
 

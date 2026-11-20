@@ -411,8 +411,20 @@ export function ChannelInventory({
     newMessage(target.route?.params) !== undefined;
   const preparingDm = composingMessage ? handoff?.preparingDm : undefined;
   const regions = useSoloNavigation(queries);
-  // Initial roster reconciliation can retire reads; demand after it settles.
-  const { archived } = useMentionArchives(queries, list.status === "ready");
+  const archiveDemand =
+    list.status === "ready" &&
+    channels.some(
+      (channel) =>
+        channel.channelType === "dm" &&
+        channel.participants?.length === 1 &&
+        channel.participants[0] !== viewer &&
+        !channel.metadataPending &&
+        !channel.huddle,
+    );
+  const { archived } = useMentionArchives(
+    queries,
+    archiveDemand && "background",
+  );
   const archivedKeys = useMemo(() => new Set(archived), [archived]);
   const sidebarChannels = useMemo(
     () =>

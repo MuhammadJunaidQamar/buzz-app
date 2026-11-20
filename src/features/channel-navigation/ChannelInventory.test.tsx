@@ -375,6 +375,9 @@ function transportArchivedDmFixture(initiallyArchived = false) {
   return {
     ...f,
     signals,
+    setChannels(channels: ChannelList["channels"]) {
+      f.roster({ channels });
+    },
     state(status: Parameters<LiveCallbacks["state"]>[0]["status"]) {
       act(() => live.state({ status, routes: [] }));
     },
@@ -383,6 +386,47 @@ function transportArchivedDmFixture(initiallyArchived = false) {
     },
   };
 }
+
+it.each(["empty", "channels", "groups", "self", "unknown"])(
+  "does not demand archive evidence for a %s roster; reads when its first eligible DM appears",
+  async (kind) => {
+    const f = transportArchivedDmFixture(true);
+    const channels = f.list.channels
+      .filter((channel) =>
+        kind === "channels"
+          ? channel.channelType === "stream"
+          : kind === "groups"
+            ? channel.id === "group"
+            : kind === "self"
+              ? channel.id === "self"
+              : kind === "unknown"
+                ? channel.id === "unknown"
+                : false,
+      )
+      .map((channel) =>
+        kind === "self"
+          ? { ...channel, participants: [f.session.viewer] }
+          : channel,
+      );
+    f.setChannels(channels);
+    f.state("connected");
+    render(f.view("channel"));
+    await act(async () => {});
+    expect(f.read).not.toHaveBeenCalled();
+    f.state("retrying");
+    f.state("connected");
+    await act(async () => {});
+    expect(f.read).not.toHaveBeenCalled();
+    const firstDm = f.list.channels.find((channel) => channel.id === "retired");
+    assert(firstDm);
+    f.setChannels([...channels, firstDm]);
+    await waitFor(() =>
+      expect(f.session.archives.snapshot().status).toBe("ready"),
+    );
+    expect(f.read).toHaveBeenCalledTimes(1);
+    expect(f.row("retired")).toBeNull();
+  },
+);
 
 it.each([false, true])(
   "keeps one startup archive read across the first connection (pending %s)",
@@ -426,7 +470,7 @@ it("demands one archive read per reconnect and none while disconnected", async (
   expect(f.read).toHaveBeenCalledTimes(1);
   f.state("retrying");
   expect(f.session.archives.snapshot().status).toBe("idle");
-  await act(() => f.session.archives.ensure());
+  await act(() => f.session.archives.ensure({ background: true }));
   expect(f.read).toHaveBeenCalledTimes(1);
   f.state("connected");
   await waitFor(() =>
@@ -534,7 +578,7 @@ it("recovers exhausted HTTP archive reads while the transport remains connected"
   await waitFor(() => expect(f.row("retired")).not.toBeNull());
 });
 
-it("retires an outage archive read still pending when the transport reconnects", async () => {
+it("retires a background archive read on another drop and fences its late result", async () => {
   const f = transportArchivedDmFixture(true);
   f.state("connected");
   render(f.view("active"));
@@ -550,10 +594,8 @@ it("retires an outage archive read still pending when the transport reconnects",
         finish = resolve;
       }),
   );
-  let refresh!: Promise<void>;
-  act(() => {
-    refresh = f.session.archives.refresh();
-  });
+  f.state("retrying");
+  f.state("connected");
   await waitFor(() =>
     expect(f.session.archives.snapshot().status).toBe("loading"),
   );
@@ -569,11 +611,10 @@ it("retires an outage archive read still pending when the transport reconnects",
   expect(signal?.aborted).toBe(true);
   await waitFor(() => expect(f.row("retired")).not.toBeNull());
   await act(async () => finish([stale]));
-  await refresh;
   expect(f.session.archives.snapshot().archived).toEqual([]);
 });
 
-it("keeps archive hiding during an unrelated transport roster revocation", async () => {
+it("keeps the pending reconnect archive read through an unrelated roster revocation", async () => {
   const f = transportArchivedDmFixture(true);
   f.state("connected");
   f.roster([f.session.viewer], 1);
@@ -589,10 +630,16 @@ it("keeps archive hiding during an unrelated transport roster revocation", async
         finish = resolve;
       }),
   );
-  f.roster([], 2);
+  const before = f.read.mock.calls.length;
+  f.state("retrying");
+  f.state("connected");
   await waitFor(() =>
     expect(f.session.archives.snapshot().status).toBe("loading"),
   );
+  const signal = f.signals.at(-1);
+  f.roster([], 2);
+  expect(signal?.aborted).toBe(false);
+  expect(f.read).toHaveBeenCalledTimes(before + 1);
   expect(f.session.archives.snapshot().archived).toEqual([f.retired]);
   expect(f.row("retired")).toBeNull();
   await act(async () => finish([f.archiveSnapshot()]));
@@ -600,6 +647,7 @@ it("keeps archive hiding during an unrelated transport roster revocation", async
     expect(f.session.archives.snapshot().status).toBe("ready"),
   );
   expect(f.row("retired")).toBeNull();
+  expect(f.read).toHaveBeenCalledTimes(before + 1);
 });
 
 it.each([false, true])(
@@ -655,7 +703,10 @@ it("retains known archive evidence through read errors and reloads idle evidence
   await act(() => f.session.archives.refresh());
   expect(f.session.archives.snapshot().status).toBe("error");
   expect(f.row("retired")).toBeNull();
-  act(() => f.owner.stale());
+  act(() => {
+    f.owner.connected(false);
+    f.owner.connected(true);
+  });
   await waitFor(() =>
     expect(f.session.archives.snapshot().status).toBe("ready"),
   );
