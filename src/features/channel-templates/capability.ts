@@ -303,7 +303,7 @@ export function createChannelKit({
           );
         if (previous)
           throw new Error(
-            "A save for this recipe is unresolved. Inspect Outbox and refresh before replacing it.",
+            "A save for this recipe is unresolved. Refresh before replacing it.",
           );
         // Replaceable records use seconds. Do not create an ambiguous equal-time replacement.
         if (current && current.created_at >= Math.floor(Date.now() / 1000))
@@ -467,7 +467,7 @@ export function createChannelKit({
         );
       if (pending)
         throw new Error(
-          "This channel has an unresolved Canvas save. Inspect Outbox before making another save.",
+          "This channel has an unresolved Canvas save. Wait for it to finish before making another save.",
         );
       if (head && head.created_at >= Math.floor(Date.now() / 1000))
         throw new Error("Please wait a second before saving Canvas again");
