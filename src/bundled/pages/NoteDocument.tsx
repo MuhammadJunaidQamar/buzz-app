@@ -542,47 +542,6 @@ export function NoteDocument({
     markdown,
     save,
   ]);
-  const downloads = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  useEffect(() => {
-    const pending = downloads.current;
-    return () => {
-      for (const [url, timer] of pending) {
-        clearTimeout(timer);
-        URL.revokeObjectURL(url);
-      }
-      pending.clear();
-    };
-  }, []);
-  const exportMarkdown = () => {
-    if (!note) return;
-    const name = resolveName(author, profile?.name ?? author)
-      .replace(/\s+/g, " ")
-      .replace(/[\\`*_[\]<>&~]/g, "\\$&");
-    const metadata = [
-      `> Source: [Open in Docs](<${noteUrl(note, community)}>)`,
-      `> Status: ${dirty || restoreFrom ? "Unsaved draft (based on the saved revision below)." : "Saved revision."}`,
-      `> Saved revision: \`${note.revision}\``,
-      `> Saved revision editor: ${name} (\`${author}\`)`,
-      `> Saved revision date: ${new Date(note.event.created_at * 1000).toISOString()}`,
-    ].join("\n>\n");
-    const url = URL.createObjectURL(
-      new Blob(
-        [`${metadata}\n\n`, editing || dirty ? markdown : note.markdown],
-        { type: "text/markdown;charset=utf-8" },
-      ),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${(editing ? title : note.title).replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 80) || "doc"}.md`;
-    link.click();
-    downloads.current.set(
-      url,
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-        downloads.current.delete(url);
-      }, 1000),
-    );
-  };
   const copyLink = () => {
     void run(async () => {
       await writeClipboardText(noteUrl(address, community));
@@ -832,7 +791,6 @@ export function NoteDocument({
                       </MenuItem>
                     )}
                   </NoteHistoryMenu>
-                  <MenuItem onClick={exportMarkdown}>Export Markdown</MenuItem>
                   {canEdit && !note.deleted && (
                     <MenuItem
                       disabled={busy || saving || dirty}

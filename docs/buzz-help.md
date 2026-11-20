@@ -1204,12 +1204,10 @@ removed and deleted docs stay hidden unless you show deleted.
 Use Share doc to grant access. New docs are private; View only allows community
 members to read. A link grants no access. Sharing includes retained revisions,
 and the relay operator can read content. Doc actions also offers revision
-history with each revision’s author and avatar, Markdown export and recoverable
-deletion. Revision times are relative; hover to see the exact date and time.
+history with each revision’s author and avatar, plus recoverable deletion.
+Revision times are relative; hover to see the exact date and time.
 Restore saves a new revision.
 Conflicting edits preserve the draft until you reconcile the newer revision.
-Markdown exports include the source link and saved revision’s editor, public key,
-revision ID and date. Unsaved drafts are labelled separately from their saved base.
 
 Doc references open beside the conversation, with normal Back/Forward and tab
 close behavior. Choose **Open in Docs** from the tab’s context menu or Doc

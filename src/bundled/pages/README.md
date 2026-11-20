@@ -19,11 +19,9 @@ lets community members read, while editors can change content. Links grant no
 access. Sharing includes retained revisions, and the relay operator can read the
 content; Docs is not end-to-end encrypted.
 
-Doc actions also provides Markdown source, export, retained revisions and
+Doc actions also provides Markdown source, retained revisions and
 recoverable deletion. Restore creates a new current revision while retaining history.
 Conflicting saves preserve your draft and require reconciliation with the latest doc.
-Markdown exports include the source link and saved revision’s editor, public key,
-revision ID and date. Unsaved drafts are labelled separately from their saved base.
 
 Doc links open beside the conversation. Back and Forward restore the document;
 explicitly closing its tab retires that visit. A standalone link opens Docs.
