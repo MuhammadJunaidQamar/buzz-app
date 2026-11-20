@@ -1130,7 +1130,9 @@ mod tests {
     }
 
     /// Reads `state` and `scale` from disk as restore does, then plans the
-    /// restore as restore does, in logical units.
+    /// restore as restore does, in logical units. Windows plans in physical
+    /// pixels, without recorded scales.
+    #[cfg(not(windows))]
     fn planned(
         state: &Value,
         scale: &[u8],
@@ -1157,6 +1159,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn position_and_size_restore_each_at_its_own_scale() {
         let monitors = mixed_scale_monitors();
         // 1200x750 points cached on the 2x laptop, then moved to (2212, -200)
