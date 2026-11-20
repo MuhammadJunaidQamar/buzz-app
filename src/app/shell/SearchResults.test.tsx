@@ -20,6 +20,7 @@ import {
   type IdentityNames,
 } from "../../features/identity-names/service";
 import { createAgentDirectory } from "../../features/identity-names/testing";
+import { localAgentsFixture } from "../../features/agents/local-testing";
 import { BestieConversationContext } from "./bestie-context";
 import { afterEach, assert, beforeEach, expect, it, vi } from "vitest";
 import { createRelaySession } from "../../features/relay/session";
@@ -4371,6 +4372,13 @@ it("offers a bounded from:@ picker with distinct identities and selects an exact
   }
 });
 
+/** A picker row's whole text: its title, then its second row if it has one. */
+function rowLines(row: HTMLElement) {
+  return [...row.querySelectorAll("span.block")]
+    .map((line) => line.textContent)
+    .join(" | ");
+}
+
 it.each(
   ["from:@", "from:", "in:@"].flatMap((operator) =>
     ["crew", undefined].flatMap((scope) =>
@@ -4466,9 +4474,17 @@ it.each(
     try {
       render(<Search />);
       const input = screen.getByRole("combobox");
-      expect(
-        await screen.findByRole("option", { name: new RegExp(label) }),
-      ).toBeVisible();
+      const row = await screen.findByRole("option", {
+        name: new RegExp(label),
+      });
+      expect(row).toBeVisible();
+      // Under the preferred verified name, only the other one: no key and no
+      // self-declared handle.
+      expect(rowLines(row)).toBe(
+        preference === "full-name"
+          ? "Robin Example | @robinz"
+          : "robinz | Robin Example",
+      );
       fireEvent.change(input, { target: { value: `${operator}robinz` } });
       expect(
         await screen.findByRole("option", { name: new RegExp(label) }),
@@ -6070,6 +6086,61 @@ it("keeps both exact authors selectable ahead of a crowded prefix page", async (
   }
 });
 
+it("offers namesakes with nothing but a name as identical rows, each its own person", async () => {
+  const relay = keypair(),
+    viewer = keypair();
+  const sams = [keypair(), keypair()];
+  const owner = createRelaySession({
+    ...scriptedTransport(viewer.pubkey, relay.pubkey).transport,
+    query: (filters) =>
+      Promise.resolve(
+        filters.some((filter) => filter.kinds?.includes(0))
+          ? // As Buzz writes a profile: one name in both kind-0 fields.
+            sams.map((person) =>
+              profile(person, { display_name: "Sam", name: "Sam" }),
+            )
+          : [],
+      ),
+  });
+  const change = vi.fn();
+  const chosen = () => {
+    const queries = change.mock.calls.flat().sort();
+    change.mockClear();
+    return queries;
+  };
+  try {
+    render(
+      <SearchResults
+        session={owner.session}
+        query="from:sam deploy"
+        onQueryChange={change}
+        input={createRef()}
+        pages={[]}
+        openNewMessage={() => {}}
+        openConversation={() => {}}
+      />,
+    );
+    const people = within(await screen.findByRole("group", { name: "People" }));
+    // Nothing shown tells the two apart, and no key is added to do so.
+    const rows = await people.findAllByRole("option", { name: "Sam" });
+    expect(rows.map(rowLines)).toEqual(["Sam", "Sam"]);
+    expect(people.getAllByRole("option")).toHaveLength(2);
+    const own = sams.map(({ pubkey }) => `from:${pubkey} deploy`).sort();
+    for (const row of rows) fireEvent.click(row);
+    expect(chosen()).toEqual(own);
+    const input = screen.getByRole("combobox");
+    for (const row of rows) {
+      expect(input).toHaveAttribute("aria-activedescendant", row.id);
+      fireEvent.keyDown(input, { key: "Enter" });
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+    }
+    expect(chosen()).toEqual(own);
+  } finally {
+    cleanup();
+    owner.dispose();
+  }
+});
+
 it.each(["from:@sam", "in:@sam"])(
   "shows a handle under a different profile name for %s, never a key",
   async (query) => {
@@ -6107,16 +6178,7 @@ it.each(["from:@sam", "in:@sam"])(
         await screen.findByRole("group", { name: "People" }),
       );
       await waitFor(() =>
-        expect(
-          people
-            .getAllByRole("option")
-            .map((row) =>
-              [...row.querySelectorAll("span.block")]
-                .map((line) => line.textContent)
-                .join(" | "),
-            )
-            .sort(),
-        ).toEqual([
+        expect(people.getAllByRole("option").map(rowLines).sort()).toEqual([
           "Sam Reader | @sreader",
           "Sam | @samira",
           "Sam | @samuel",
@@ -6130,6 +6192,65 @@ it.each(["from:@sam", "in:@sam"])(
     }
   },
 );
+
+it("omits a handle that repeats the title an agent's own name gives it", async () => {
+  const relay = keypair(),
+    viewer = keypair(),
+    agent = keypair();
+  const scope = "https://relay.example.test";
+  // This machine's name for its agent is the title, not its profile name.
+  const control = localAgentsFixture([
+    {
+      pubkey: agent.pubkey,
+      name: "scout",
+      relayUrl: scope,
+      owner: viewer.pubkey,
+    },
+  ]);
+  const directory = createAgentDirectory(control);
+  const owner = createRelaySession(
+    {
+      ...scriptedTransport(viewer.pubkey, relay.pubkey).transport,
+      scope,
+      query: (filters) =>
+        Promise.resolve(
+          filters.some((filter) => filter.kinds?.includes(0))
+            ? [profile(agent, { display_name: "Scout Bot", name: "scout" })]
+            : [],
+        ),
+    },
+    {
+      agentChoices: control,
+      identityNames: {
+        bind: (source) =>
+          bindNames(source, {
+            snapshot: () => [directory],
+            subscribe: () => () => {},
+          }),
+      } as IdentityNames,
+    },
+  );
+  try {
+    render(
+      <SearchResults
+        session={owner.session}
+        query="from:@scout"
+        onQueryChange={() => {}}
+        input={createRef()}
+        pages={[]}
+        openNewMessage={() => {}}
+        openConversation={() => {}}
+      />,
+    );
+    const agents = within(await screen.findByRole("group", { name: "Agents" }));
+    await waitFor(() =>
+      expect(agents.getAllByRole("option").map(rowLines)).toEqual(["scout"]),
+    );
+  } finally {
+    cleanup();
+    owner.dispose();
+  }
+});
 
 it("keeps a person visible when agent candidates exceed the picker cap", async () => {
   const relay = keypair(),
