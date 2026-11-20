@@ -425,7 +425,14 @@ function OwnedCompletion({
     const accepted = withHumanMentionSelection(event, () =>
       current.current.replace(item.edit, query, observation, key),
     );
-    if (accepted) current.current.editor.invalidate();
+    if (accepted) {
+      current.current.editor.invalidate();
+      try {
+        item.onSelect?.();
+      } catch {
+        /* A provider callback cannot undo the accepted edit. */
+      }
+    }
     return accepted;
   }
   useLayoutEffect(() => {
