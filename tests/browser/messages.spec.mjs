@@ -496,25 +496,30 @@ test("shared thread UI auto-loads, follows live replies, retries and isolates re
     await page.evaluate(() => {
       document.documentElement.dataset.colorMode = "dark";
     });
-    const evidence = testInfo.outputPath("human-agent-thread-avatars.png");
-    const humanBox = await threadHumanAvatar.boundingBox();
-    const agentBox = await threadAgentAvatar.boundingBox();
-    const panelBox = await panel.boundingBox();
-    if (!humanBox || !agentBox || !panelBox)
-      throw new Error("Missing avatar evidence bounds");
-    const top = Math.max(0, Math.min(humanBox.y, agentBox.y) - panelBox.y - 36);
-    const bottom =
-      Math.max(humanBox.y + humanBox.height, agentBox.y + agentBox.height) -
-      panelBox.y +
-      72;
-    await panel.screenshot({
-      path: evidence,
-      clip: { x: 0, y: top, width: 440, height: bottom - top },
-    });
-    await testInfo.attach("human-agent-thread-avatars", {
-      path: evidence,
-      contentType: "image/png",
-    });
+    for (const [name, avatar] of [
+      ["human", threadHumanAvatar],
+      ["agent", threadAgentAvatar],
+    ]) {
+      await scrollUntilMounted(history, avatar);
+      const evidence = testInfo.outputPath(`${name}-thread-avatar.png`);
+      const box = await avatar.boundingBox();
+      const panelBox = await panel.boundingBox();
+      if (!box || !panelBox) throw new Error("Missing avatar evidence bounds");
+      const top = Math.max(0, box.y - panelBox.y - 36);
+      await panel.screenshot({
+        path: evidence,
+        clip: {
+          x: 0,
+          y: top,
+          width: 440,
+          height: box.y + box.height - panelBox.y + 72 - top,
+        },
+      });
+      await testInfo.attach(`${name}-thread-avatar`, {
+        path: evidence,
+        contentType: "image/png",
+      });
+    }
     await expect(
       history.getByText("Rendered from an agent envelope", { exact: true }),
     ).toHaveCSS("font-weight", /^(650|700)$/);

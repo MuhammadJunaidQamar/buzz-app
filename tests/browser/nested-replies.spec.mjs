@@ -2,6 +2,7 @@ import { hoverMessage } from "./message-actions.mjs";
 import { test, expect } from "./fixture.mjs";
 import { frames, open } from "./timeline.mjs";
 import { settlePanelMotion } from "./navigation.mjs";
+import { scrollUntilMounted } from "./thread-rows.mjs";
 import { generateSecretKey, getPublicKey } from "nostr-tools";
 import { animationsSettled } from "./animations.mjs";
 import { chooseDefaultSkinTone } from "./skin-tone.mjs";
@@ -811,11 +812,11 @@ test.describe("touch branch controls", () => {
     expect(motion).toEqual({ transition: "0s", animation: "0s" });
 
     app.reply(root.id);
-    await expect(
-      panel.getByText("New peer reply", { exact: true }),
-    ).toBeVisible();
     await expect(child).toBeVisible();
     await expect(summary).toHaveCount(0);
+    const arrived = panel.getByText("New peer reply", { exact: true });
+    await scrollUntilMounted(history, arrived);
+    await expect(arrived).toBeVisible();
   });
 });
 

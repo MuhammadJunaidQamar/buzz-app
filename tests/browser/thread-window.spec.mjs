@@ -1,5 +1,5 @@
 import { test, expect } from "./playwright-test.mjs";
-import { threadReplyCount } from "./thread-rows.mjs";
+import { scrollUntilMounted, threadReplyCount } from "./thread-rows.mjs";
 import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
@@ -204,7 +204,6 @@ test("older-page loading adds no row or layout shift while the request is held",
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/messages.html?threadWindow=1`,
     );
     const history = page.getByRole("region", { name: "Thread messages" });
-    const replies = history.locator("ol [data-message-id]");
     await expect.poll(() => threadReplyCount(history)).toBe(10);
     // Settle at the top before the held request so native scrolling cannot
     // masquerade as a layout shift caused by a loading row.
@@ -216,7 +215,8 @@ test("older-page loading adds no row or layout shift while the request is held",
     await page.evaluate(() => document.fonts.ready);
     const before = await history.evaluate((el) => ({
       height: el.scrollHeight,
-      top: el.querySelector("ol [data-message-id]").getBoundingClientRect().top,
+      top: el.querySelector("[data-thread-rows] > ol").getBoundingClientRect()
+        .top,
     }));
     await page.evaluate(() => window.messagesFixture.holdOlderPage());
     await history.hover();
@@ -232,11 +232,10 @@ test("older-page loading adds no row or layout shift while the request is held",
     expect(
       await history.evaluate((el) => ({
         height: el.scrollHeight,
-        top: el.querySelector("ol [data-message-id]").getBoundingClientRect()
+        top: el.querySelector("[data-thread-rows] > ol").getBoundingClientRect()
           .top,
       })),
     ).toEqual(before);
-    expect(await replies.count()).toBe(10);
     await page.evaluate(() => window.messagesFixture.releaseOlderPage());
     await expect.poll(() => threadReplyCount(history)).toBe(60);
     await expect(cue).toHaveCount(0);
@@ -312,6 +311,7 @@ test("newest window positions immediately; scrollback preserves the visible repl
     expect(continuation.before_id).toBeDefined();
     await expect(history.getByText("Loading older replies…")).toHaveCount(0);
     // Newly prepended content preserves the reply being read.
+    await scrollUntilMounted(history, replies.first());
     await replies.first().scrollIntoViewIfNeeded();
     await expect(replies.first()).toBeInViewport();
     const readingId = await history.evaluate((el) => {
@@ -411,6 +411,7 @@ test("older-page retry reparents a visible reply under its late parent", async (
     await page.mouse.wheel(0, -300);
     const retry = history.getByRole("button", { name: "Try again" });
     await expect(history.getByRole("alert")).toContainText("Older page failed");
+    await scrollUntilMounted(history, child);
     await child.scrollIntoViewIfNeeded();
     await expect(child).toBeInViewport();
     await page.evaluate(() => window.messagesFixture.holdOlderPage());

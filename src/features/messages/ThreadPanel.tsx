@@ -73,7 +73,13 @@ import type { PageNavigation } from "../navigation/service";
 import { messageViewKey } from "./view-key";
 import { useKnownAgentPubkeys } from "../agents/use-known";
 import { JumpToLatestButton } from "./JumpToLatestButton";
-import { correctScrollTop } from "./scroll-correction";
+import { correctScrollTop as applyScrollCorrection } from "./scroll-correction";
+
+const corrected = new WeakMap<HTMLElement, number>();
+function correctScrollTop(element: HTMLElement, delta: number) {
+  applyScrollCorrection(element, delta);
+  corrected.set(element, element.scrollTop);
+}
 
 /** Virtua mounts a row at an estimated offset, hidden until it measures it:
  * never a reading anchor. */
@@ -2239,8 +2245,8 @@ function ThreadMessages({
     return item ? [item] : [];
   });
   // Kept mounted with their top-level reply: the exact target, an own send
-  // awaiting its reveal, the focused row, rows that asked, and the place a
-  // Back/Forward return restores.
+  // awaiting its reveal, the focused row, the unread line, rows that asked,
+  // and the place a Back/Forward return restores.
   const returnAnchor =
     returning && restoredVisit.current !== navigation?.signal
       ? (navigation?.position(THREAD_PLACE) as ThreadPlace | undefined)?.anchor
@@ -2251,9 +2257,14 @@ function ThreadMessages({
     return itemOwners.get(top) ?? top;
   };
   const keptIds = new Set(
-    [messageId, sent, focusedId, returnAnchor, ...pinnedIds.keys()].flatMap(
-      (id) => (id ? [itemOf(id)] : []),
-    ),
+    [
+      messageId,
+      sent,
+      focusedId,
+      returnAnchor,
+      lineRow,
+      ...pinnedIds.keys(),
+    ].flatMap((id) => (id ? [itemOf(id)] : [])),
   );
   const keptIndices = listed.flatMap((item, index) =>
     keptIds.has(String(item.key)) ? [index] : [],
@@ -2419,7 +2430,11 @@ function ThreadMessages({
           if (jumpingToLatest.current) return;
           captureResizePosition();
           if (element.scrollTop !== lineTop.current) {
-            follow.current = bottom && !detached;
+            // Virtua's sizes are still estimates right after a correction, so
+            // the geometry it was made in can read as the bottom.
+            const echo =
+              Math.abs(element.scrollTop - (corrected.get(element) ?? -1)) < 1;
+            follow.current = bottom && !detached && !(echo && !follow.current);
             lineTop.current = undefined;
           }
           setShowJumpToLatest(!bottom || detached);
@@ -2558,7 +2573,9 @@ function ThreadMessages({
               scrollRef={scroller}
               as="ol"
               item={ThreadItem}
-              shift={staged.shift}
+              // An exact target corrects for a page by its own offset; Virtua's
+              // shift would correct for the same page again.
+              shift={staged.shift && targetAnchor.current === undefined}
               bufferSize={1600}
               keepMounted={keptIndices}
               startMargin={listStart}
