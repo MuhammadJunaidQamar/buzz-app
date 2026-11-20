@@ -1007,7 +1007,8 @@ Quitting Buzz also turns it off.
   by a space, unless one already follows, so you can keep typing. Emoji you
   choose often, from suggestions or the emoji picker, come first among equally
   close matches and fill the picker's **Frequently used** row. This history is
-  kept on the device.
+  kept on the device and holds only as many emoji as that row shows, plus your
+  latest choice.
 - **Reminder counts** show how many reminders are due in a small capsule on the
   app tile's corner. It shows `99+` above 99; its accessible label keeps the
   exact count.
