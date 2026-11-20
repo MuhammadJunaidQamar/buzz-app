@@ -499,10 +499,11 @@ export function PageTabs({
                   id: "conversation",
                   label,
                   icon,
-                  toolbar: workspace && (
+                  toolbar: (workspace?.headerActions ||
+                    !!workspace?.actions?.length) && (
                     <>
-                      {workspace.headerActions}
-                      {!!workspace.actions?.length && (
+                      {workspace?.headerActions}
+                      {!!workspace?.actions?.length && (
                         <MenuRoot>
                           <MenuTrigger
                             render={
