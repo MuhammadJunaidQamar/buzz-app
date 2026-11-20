@@ -12,7 +12,7 @@ import type { NotesPage, NotesWorkspace } from "./workspace";
 export function useNotesCollection(workspace: NotesWorkspace) {
   const current = useRef<NotesPage>({ notes: [], more: false });
   const [collection, publish] = useState(current.current);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const listing = useRef<AbortController | undefined>(undefined);
   const reading = useRef(new Map<string, AbortController>());

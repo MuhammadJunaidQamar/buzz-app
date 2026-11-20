@@ -12,6 +12,7 @@ import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
 import { Button } from "../../shared/design-system/ui/Button";
 import { EmptyState } from "../../shared/design-system/ui/EmptyState";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
+import { LoadingRegion } from "../../shared/design-system/ui/LoadingRegion";
 import { Panel } from "../../shared/design-system/ui/Panel";
 import {
   PanelHeader,
@@ -25,6 +26,7 @@ import {
   PopoverDescription,
 } from "../../shared/design-system/ui/Popover";
 import { SearchField } from "../../shared/design-system/ui/SearchField";
+import { TypingDots } from "../../shared/design-system/ui/TypingDots";
 import {
   MenuRoot,
   MenuTrigger,
@@ -173,14 +175,7 @@ export function NotesPage({
                 <IconButton
                   aria-label="Refresh docs"
                   title="Refresh docs"
-                  icon={
-                    <ArrowsClockwiseIcon
-                      size={16}
-                      className={
-                        loading ? "motion-safe:animate-spin" : undefined
-                      }
-                    />
-                  }
+                  icon={<ArrowsClockwiseIcon size={16} />}
                   aria-busy={loading}
                   disabled={loading}
                   onClick={refresh}
@@ -225,38 +220,45 @@ export function NotesPage({
                   </MenuRoot>
                 }
               />
-              {loading && (
-                <span role="status" className="sr-only">
-                  Reading docs…
-                </span>
-              )}
               {error && <p role="alert">{error}</p>}
-              {empty && (
-                <EmptyState
-                  icon={null}
-                  title="No docs yet"
-                  description="Create a doc or ask an agent to save one."
-                  action={
-                    <Button variant="subtle" onClick={create}>
-                      <PlusIcon size={16} aria-hidden="true" />
-                      New doc
-                    </Button>
-                  }
-                />
-              )}
-              {!empty && (
-                <ul className={styles.titleList} aria-label="Docs">
-                  {visible.map(titleLink)}
-                  <li key="new-page">
-                    <NavigationItem
-                      variant="text"
-                      icon={<PlusIcon size={16} aria-hidden="true" />}
-                      label="New doc"
-                      onClick={create}
-                    />
-                  </li>
-                </ul>
-              )}
+              <LoadingRegion
+                pending={loading}
+                statusVisibility={
+                  loading && !entries.length ? "visible" : "screen-reader"
+                }
+                label={
+                  <span className="inline-flex items-center gap-2">
+                    <TypingDots size="small" />
+                    Loading docs…
+                  </span>
+                }
+              >
+                {empty ? (
+                  <EmptyState
+                    icon={null}
+                    title="No docs yet"
+                    description="Create a doc or ask an agent to save one."
+                    action={
+                      <Button variant="subtle" onClick={create}>
+                        <PlusIcon size={16} aria-hidden="true" />
+                        New doc
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <ul className={styles.titleList} aria-label="Docs">
+                    {visible.map(titleLink)}
+                    <li key="new-page">
+                      <NavigationItem
+                        variant="text"
+                        icon={<PlusIcon size={16} aria-hidden="true" />}
+                        label="New doc"
+                        onClick={create}
+                      />
+                    </li>
+                  </ul>
+                )}
+              </LoadingRegion>
               {!loading && !error && query && !visible.length && (
                 <p role="status">No matching docs.</p>
               )}

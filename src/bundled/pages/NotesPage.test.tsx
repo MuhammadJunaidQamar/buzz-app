@@ -1,9 +1,50 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, screen, within } from "@testing-library/react";
-import { expect, it } from "vitest";
-import { render, workspaceFixture } from "./ui-testing";
+import { act, fireEvent, screen, within } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
+import { advance, gate, render, workspaceFixture } from "./ui-testing";
 import { WorkingNotesCommunity } from "./WorkingNotesPage";
+
+it.each([false, true])(
+  "keeps New doc available while loading the collection (slow: %s)",
+  async (slow) => {
+    const f = await workspaceFixture();
+    f.seed("Research plan", "Body");
+    const read = gate();
+    const list = f.workspace.list;
+    const request = vi.spyOn(f.workspace, "list");
+    request.mockImplementationOnce(async (...args) => {
+      await read.promise;
+      return list(...args);
+    });
+    vi.useFakeTimers();
+    render(<WorkingNotesCommunity workspace={f.workspace} />);
+    const create = screen.getByRole("button", { name: "New doc" });
+    const region = create.closest('[aria-busy="true"]');
+    try {
+      expect(request).toHaveBeenCalledOnce();
+      expect(region).not.toBeNull();
+      expect(create).toBeEnabled();
+      expect(screen.queryByText("No docs yet")).not.toBeInTheDocument();
+      await act(() => create.focus());
+      await advance(999);
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      if (slow) {
+        await advance(1);
+        expect(screen.getByRole("status")).toHaveTextContent("Loading docs…");
+      }
+    } finally {
+      await act(async () => {
+        read.release();
+        await request.mock.results[0]?.value;
+      });
+    }
+    expect(region).toHaveAttribute("aria-busy", "false");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(create).toHaveFocus();
+    expect(screen.getByRole("link", { name: "Research plan" })).toBeVisible();
+  },
+);
 
 it("lists all readable docs together with last-editor attribution and searches across creators", async () => {
   const f = await workspaceFixture();
