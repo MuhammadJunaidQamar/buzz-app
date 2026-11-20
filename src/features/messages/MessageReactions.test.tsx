@@ -10,6 +10,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ConversationPresentation } from "../conversation/ConversationPresentation";
+import { ReactionDelivery } from "../conversation/ReactionTool";
 import { MessageReactionControls, MessageReactions } from "./MessageReactions";
 import { PREVIEW_REST_MS } from "../../shared/design-system/ui/hoverIntent";
 import { createRelaySession } from "../relay/session";
@@ -498,6 +499,89 @@ it.each([
     ]);
     expect(screen.queryByRole("button", { name: "Retry reaction" })).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
+    vi.restoreAllMocks();
+  },
+);
+it.each([
+  ["a double click", "double"],
+  ["a send that throws", "send"],
+  ["a dismissal that fails", "dismiss"],
+] as const)(
+  "retries an expired reaction once and reports a problem: %s",
+  async (_name, mode) => {
+    let open = false;
+    const publish = vi.fn(async (event: RelayEvent) => {
+      if (event.created_at < Math.floor(Date.now() / 1000) - 15 * 60)
+        throw new PublishRejected("Too old");
+      if (!open) throw new PublishRejected("Nope");
+    });
+    const h = harness([], publish);
+    const view = render(<h.Controls />);
+    fireEvent.click(
+      within(screen.getByTestId("reaction-controls")).getByRole("button", {
+        name: "Choose reaction",
+      }),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    const [stuck] = h.session.outbox?.snapshot() ?? [];
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 16 * 60_000);
+    open = true;
+    const real = h.session.outbox;
+    if (!real) throw new Error("No outbox");
+    // The session's outbox is frozen, so the failing calls go through a copy.
+    if (mode !== "double") {
+      view.unmount();
+      const outbox = {
+        ...real,
+        send: (...args: Parameters<typeof real.send>) => {
+          if (mode === "send") throw new Error("Outbox is closed");
+          return real.send(...args);
+        },
+        dismiss: (...args: Parameters<typeof real.dismiss>) =>
+          mode === "dismiss"
+            ? Promise.reject(new Error("Could not clear the old update"))
+            : real.dismiss(...args),
+      };
+      render(
+        <ReactionDelivery
+          session={{ ...h.session, outbox }}
+          messageId={root.id}
+        />,
+      );
+    }
+    const button = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Retry reaction",
+    });
+    fireEvent.click(button);
+    if (mode === "double") {
+      fireEvent.click(button);
+      expect(button.disabled).toBe(true);
+    }
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    const sent = publish.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.id !== stuck?.event.id);
+    if (mode === "send") {
+      expect(sent).toHaveLength(0);
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "Outbox is closed",
+      );
+      expect(button.disabled).toBe(false);
+    } else if (mode === "dismiss") {
+      expect(sent).toHaveLength(1);
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "Could not clear the old update",
+      );
+    } else {
+      expect(sent).toHaveLength(1);
+      expect(screen.queryByRole("alert")).toBeNull();
+    }
     vi.restoreAllMocks();
   },
 );

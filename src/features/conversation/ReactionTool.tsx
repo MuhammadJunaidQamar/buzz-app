@@ -134,7 +134,7 @@ export function reactionTarget(event: Pick<EventData, "kind" | "tags">) {
 
 /** The relay refuses a signed event after 15 minutes, so an older update is
  * sent again as a new event for the same reaction. */
-function retryReaction(outbox: Outbox, item: OutgoingEvent) {
+async function retryReaction(outbox: Outbox, item: OutgoingEvent) {
   const { id, kind, content, tags, created_at } = item.event;
   if (Date.now() / 1000 - created_at < 15 * 60) return outbox.retry(id);
   outbox.send({
@@ -142,7 +142,7 @@ function retryReaction(outbox: Outbox, item: OutgoingEvent) {
     content,
     tags: tags.filter(([name]) => name !== "client-id" && name !== "ms"),
   });
-  outbox.dismiss(id).catch(() => {});
+  await outbox.dismiss(id);
 }
 
 export function ReactionDelivery({
@@ -158,6 +158,27 @@ export function ReactionDelivery({
     outbox?.snapshot ?? emptyOperations,
     outbox?.snapshot ?? emptyOperations,
   );
+  const [retrying, setRetrying] = useState(false);
+  const inFlight = useRef(false);
+  const [error, setError] = useState<string>();
+  const retry = async (item: OutgoingEvent) => {
+    if (!outbox || inFlight.current) return;
+    inFlight.current = true;
+    setRetrying(true);
+    setError(undefined);
+    try {
+      await retryReaction(outbox, item);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not retry the reaction. Try again.",
+      );
+    } finally {
+      inFlight.current = false;
+      setRetrying(false);
+    }
+  };
   const operation = operations.find(
     (item) =>
       ["failed", "unknown"].includes(item.delivery) &&
@@ -165,19 +186,23 @@ export function ReactionDelivery({
   );
   if (!operation) return null;
   return (
-    <span role="status">
-      {operation.delivery === "failed"
-        ? "Couldn’t update reaction."
-        : "Reaction delivery not confirmed."}{" "}
-      <Button
-        size="sm"
-        variant="ghost"
-        type="button"
-        onClick={() => outbox && retryReaction(outbox, operation)}
-      >
-        Retry reaction
-      </Button>
-    </span>
+    <>
+      <span role="status">
+        {operation.delivery === "failed"
+          ? "Couldn’t update reaction."
+          : "Reaction delivery not confirmed."}{" "}
+        <Button
+          size="sm"
+          variant="ghost"
+          type="button"
+          disabled={retrying}
+          onClick={() => retry(operation)}
+        >
+          Retry reaction
+        </Button>
+      </span>
+      {error && <span role="alert">{error}</span>}
+    </>
   );
 }
 
