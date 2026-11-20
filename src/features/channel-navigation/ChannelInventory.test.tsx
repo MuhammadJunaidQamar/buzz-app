@@ -424,7 +424,7 @@ it.each(["empty", "channels", "groups", "self", "unknown"])(
       expect(f.session.archives.snapshot().status).toBe("ready"),
     );
     expect(f.read).toHaveBeenCalledTimes(1);
-    expect(f.row("retired")).toBeNull();
+    await waitFor(() => expect(f.row("retired")).toBeNull());
   },
 );
 
