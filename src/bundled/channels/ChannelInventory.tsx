@@ -68,6 +68,7 @@ import {
   type RegisteredSidebarRows,
 } from "../../features/channel-navigation/sidebar-rows-service";
 import { useSidebarRowUnread } from "../../features/channel-navigation/useSidebarRowUnread";
+import { rowUnread as channelRowUnread } from "../../features/relay/unread";
 import type { SidebarSortMode } from "../../features/relay/sidebar-sort";
 import type { SidebarFrame } from "../../features/channel-navigation/SidebarFrame";
 import { Button } from "../../shared/design-system/ui/Button";
@@ -411,6 +412,10 @@ export function ChannelInventory({
     newMessage(target.route?.params) !== undefined;
   const preparingDm = composingMessage ? handoff?.preparingDm : undefined;
   const regions = useSoloNavigation(queries);
+  const archiveConnected = useSyncExternalStore(
+    queries.live.subscribe,
+    () => queries.live.snapshot().status === "connected",
+  );
   const archiveDemand =
     list.status === "ready" &&
     channels.some(
@@ -423,9 +428,22 @@ export function ChannelInventory({
     );
   const { archived } = useMentionArchives(
     queries,
-    archiveDemand && "background",
+    archiveDemand && archiveConnected && "background",
   );
   const archivedKeys = useMemo(() => new Set(archived), [archived]);
+  const archivedDmUnread = useSidebarRowUnread(
+    queries.unread,
+    JSON.stringify(
+      channels
+        .filter(
+          (channel) =>
+            channel.channelType === "dm" &&
+            channel.participants?.length === 1 &&
+            archivedKeys.has(channel.participants[0] ?? ""),
+        )
+        .map((channel) => channel.id),
+    ),
+  );
   const sidebarChannels = useMemo(
     () =>
       channels.filter(
@@ -438,7 +456,16 @@ export function ChannelInventory({
             channel.channelType === "dm" &&
             channel.participants?.length === 1 &&
             channel.participants[0] !== viewer &&
-            archivedKeys.has(channel.participants[0] ?? "")
+            archivedKeys.has(channel.participants[0] ?? "") &&
+            !channelRowUnread(
+              archivedDmUnread.get(channel.id) ??
+                queries.unread.snapshot({
+                  kind: "channel",
+                  channelId: channel.id,
+                }),
+              true,
+              false,
+            )
           ) &&
           (channel.channelType !== "solo" ||
             (eligibleSolo(channel, viewer) &&
@@ -451,7 +478,16 @@ export function ChannelInventory({
               preparingDm.members.has(member),
             )),
       ),
-    [channels, preparingDm, promotedDm, regions.excluded, viewer, archivedKeys],
+    [
+      channels,
+      preparingDm,
+      promotedDm,
+      regions.excluded,
+      viewer,
+      archivedKeys,
+      archivedDmUnread,
+      queries.unread,
+    ],
   );
   const currentDraft =
     target.kind === "page" && target.pluginId === "buzz.channels"

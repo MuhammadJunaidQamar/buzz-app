@@ -14,11 +14,7 @@ export function useMentionArchives(
     empty,
   );
   useEffect(() => {
-    if (
-      demand &&
-      (snapshot.status === "idle" ||
-        (demand === true && snapshot.status === "loading"))
-    )
+    if (demand && snapshot.status !== "unavailable")
       void session.archives?.ensure({ background: demand === "background" });
   }, [session, demand, snapshot.status]);
   return snapshot;

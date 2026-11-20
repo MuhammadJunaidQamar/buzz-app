@@ -20,8 +20,8 @@ export function useAgentChoices(
   }, [source, includeLegacy]);
   const archivePending =
     archive &&
-    (choices.archives.status === "idle" ||
-      choices.archives.status === "loading");
+    choices.archives.status !== "ready" &&
+    choices.archives.status !== "unavailable";
   useEffect(() => {
     if (choices.pending || archivePending)
       source.ensure(includeLegacy, archive);

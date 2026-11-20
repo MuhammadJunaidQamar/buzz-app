@@ -287,9 +287,7 @@ export function createAgentChoices({
       if (signal.aborted) return;
       if (includeLegacy && library.snapshot().status === "idle")
         void library.refresh();
-      const archiveStatus = archives?.snapshot().status;
-      if (archive && (archiveStatus === "idle" || archiveStatus === "loading"))
-        void archives?.ensure();
+      if (archive) void archives?.ensure();
     },
     /** `fresh` rereads inventory even over a read already in flight, as after
      * a change that read may predate. */

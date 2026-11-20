@@ -79,9 +79,7 @@ export function createIdentityArchives(
   const requests = new Set<AbortController>();
   const listeners = new Set<() => void>();
   let closed = false;
-  // Keep connection scheduling private: consumers still see idle as pending.
-  let paused = false;
-  let demanded = false;
+  // Recovery may defer sidebar work; active consumers can claim the same read.
   let backgroundRead = false;
   let controller: AbortController | undefined;
   let pending: Promise<void> | undefined;
@@ -98,13 +96,9 @@ export function createIdentityArchives(
   }
   function refresh(background = false): Promise<void> {
     if (closed || !available || !authority) return Promise.resolve();
-    // An active consumer can join an automatic read and keep it across a drop.
+    // An active consumer also claims recovery of an already failed read.
     if (!background) backgroundRead = false;
     if (pending) return pending;
-    if (background && (paused || Date.now() < (snapshot.retryAt ?? 0))) {
-      demanded = true;
-      return Promise.resolve();
-    }
     backgroundRead = background;
     const owned = new AbortController();
     controller = owned;
@@ -346,13 +340,10 @@ export function createIdentityArchives(
   function clear() {
     publish({ status: stop(), archived: empty });
   }
-  /** Retire snapshot freshness, retaining visibility. Mutations have their own
-   * caller/lifetime cancellation and do not depend on the live socket. */
+  /** Reconnect retires settled evidence, retaining visibility. A finite HTTP
+   * read already in flight may finish; failures retain their recovery deadline. */
   function stale() {
-    stopRead();
-    // Socket changes cannot shorten the relay's admission delay. Keep the
-    // failure visible to the existing recovery owner until it may retry.
-    if (snapshot.retryAt !== undefined) return;
+    if (pending || snapshot.transient) return;
     const { error: _, transient: __, retryAt: ___, ...known } = snapshot;
     publish({
       ...known,
@@ -373,9 +364,7 @@ export function createIdentityArchives(
       ensure: ({ background = false }: { background?: boolean } = {}) => {
         if (!background) backgroundRead = false;
         if (snapshot.status !== "idle") return pending ?? Promise.resolve();
-        if (!background || !paused) return refresh(background);
-        demanded = true;
-        return Promise.resolve();
+        return refresh(background);
       },
       refresh: () => refresh(),
       /** Whether this community advertises an archive authority; fixed per session. */
@@ -386,21 +375,11 @@ export function createIdentityArchives(
     }),
     clear,
     stale,
-    // Automatic recovery keeps the failed read's demand, unlike manual Refresh.
-    retry: () => refresh(backgroundRead),
-    connected(value: boolean) {
-      paused = !value;
-      if (!value) {
-        if (pending && backgroundRead) demanded = true;
-        if (!pending || backgroundRead) stale();
-      } else {
-        if (snapshot.status === "error") stale();
-        if (demanded) {
-          demanded = false;
-          if (snapshot.status === "idle") void refresh(true);
-        }
-      }
-    },
+    // The session owns socket readiness and admission timing for new retries.
+    retry: (connected: boolean) =>
+      !backgroundRead || connected
+        ? refresh(backgroundRead)
+        : Promise.resolve(),
     dispose() {
       closed = true;
       clear();

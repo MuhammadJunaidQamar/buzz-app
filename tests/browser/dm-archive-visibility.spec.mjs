@@ -146,6 +146,27 @@ test("archived one-to-one DMs leave the sidebar while history and open drafts su
   await refresh([]);
   await expect(dm).toBeVisible();
   await expect(history).toContainText("Preserved DM history");
+  // An archived participant may still post. Keep unread content reachable
+  // from the sidebar until the actual conversation read lifecycle clears it.
+  await sidebar.locator('[data-channel-id="alpha"]').click();
+  await expect(history).toHaveCount(0);
+  await expect.poll(() => app.relay.hasRoute("primary", "dm-peer")).toBe(true);
+  const incoming = app.append(
+    "primary",
+    "dm-peer",
+    "Unread from archived Alice",
+    true,
+    false,
+  );
+  await expect(dm.locator("[data-channel-unread]")).toBeVisible();
+  await refresh([app.participants[0]]);
+  await expect(dm).toBeVisible();
+  await expect(dm.locator("[data-channel-unread]")).toBeVisible();
+  await dm.click();
+  await expect(
+    conversation.locator(`[data-message-id="${incoming.id}"]`),
+  ).toContainText("Unread from archived Alice");
+  await expect(dm).toHaveCount(0);
   expect(app.histories.get("primary/dm-peer")).toContainEqual(old);
   expect(
     app.report.publications.filter(({ event }) =>

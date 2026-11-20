@@ -7,8 +7,88 @@ import type { LiveCallbacks } from "../relay/live";
 import { localAgentsFixture } from "../agents/local-testing";
 import { useMentionArchives } from "../messages/use-mention-archives";
 import { useTemplateAgents } from "./useTemplateAgents";
+import { ReadError } from "../relay/errors";
 
 afterEach(cleanup);
+
+it.each(["mention", "template"] as const)(
+  "%s demand claims a background admission retry during an outage",
+  async (consumer) => {
+    vi.useFakeTimers();
+    const viewer = keypair(),
+      relay = keypair(),
+      agent = keypair();
+    const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
+    const query = vi.fn(wire.transport.query);
+    let live!: LiveCallbacks;
+    const owner = createRelaySession(
+      {
+        ...wire.transport,
+        query,
+        scope: "https://relay.example.test",
+        archiveAuthority: relay.pubkey,
+        subscribe(callbacks) {
+          live = callbacks;
+          return { update() {}, retry() {}, dispose() {} };
+        },
+      },
+      {
+        agentChoices: localAgentsFixture([
+          {
+            pubkey: agent.pubkey,
+            name: "Template agent",
+            relayUrl: "wss://relay.example.test",
+            owner: viewer.pubkey,
+          },
+        ]),
+      },
+    );
+    try {
+      live.state({ status: "connected", routes: [] });
+      const first = owner.session.archives.ensure({ background: true });
+      wire.next().fail(new ReadError("unavailable", "quota", 429, 60_000));
+      await first;
+      const deadline = owner.session.archives.snapshot().retryAt;
+      live.state({ status: "retrying", routes: [] });
+      renderHook(() => {
+        useMentionArchives(owner.session, consumer === "mention");
+        useTemplateAgents(
+          owner.session,
+          consumer === "template"
+            ? {
+                id: "template",
+                name: "Template",
+                agents: [agent.pubkey],
+                teams: [],
+                canvas: "",
+              }
+            : undefined,
+        );
+      });
+      await act(() => vi.advanceTimersByTimeAsync(59_999));
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(owner.session.archives.snapshot().retryAt).toBe(deadline);
+      for (let tick = 0; tick < 10 && !wire.pending.length; tick++)
+        await act(() => vi.advanceTimersToNextTimerAsync());
+      expect(Date.now()).toBeGreaterThanOrEqual(deadline ?? 0);
+      expect(query).toHaveBeenCalledTimes(2);
+      expect(wire.pending).toHaveLength(1);
+      await act(async () => {
+        wire
+          .next()
+          .respond([
+            signed(relay, { kind: 13535, content: "", tags: [["-"]] }),
+          ]);
+        await owner.session.archives.ensure();
+      });
+      expect(owner.session.archives.snapshot().status).toBe("ready");
+    } finally {
+      cleanup();
+      owner.dispose();
+      vi.useRealTimers();
+    }
+  },
+);
 
 it("finishes template archive checks over HTTP during a socket-only outage", async () => {
   const viewer = keypair(),

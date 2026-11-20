@@ -114,6 +114,70 @@ it("session recovery respects archive admission delays and stops after success",
   await vi.advanceTimersByTimeAsync(120_000);
   expect(h.query).toHaveBeenCalledTimes(count);
 });
+it("retains an active transient failure across socket loss until HTTP recovery", async () => {
+  vi.useFakeTimers();
+  const h = harness();
+  h.live.state({ status: "connected", routes: [] });
+  const first = h.archives.ensure();
+  for (let attempt = 0; attempt < 4; attempt++) {
+    h.wire.next().fail(new ReadError("unavailable", "offline", 503));
+    if (attempt < 3) await vi.advanceTimersToNextTimerAsync();
+  }
+  await first;
+  h.live.state({ status: "retrying", routes: [] });
+  expect(h.archives.snapshot()).toMatchObject({
+    status: "error",
+    transient: true,
+  });
+  await vi.advanceTimersToNextTimerAsync();
+  h.wire.next().respond([snapshot()]);
+  await h.archives.ensure();
+  expect(h.archives.state(target.pubkey)).toBe("archived");
+  expect(h.query).toHaveBeenCalledTimes(5);
+});
+
+it("defers new sidebar recovery reads during socket loss", async () => {
+  vi.useFakeTimers();
+  const h = harness();
+  h.live.state({ status: "connected", routes: [] });
+  const first = h.archives.ensure({ background: true });
+  for (let attempt = 0; attempt < 4; attempt++) {
+    h.wire.next().fail(new ReadError("unavailable", "offline", 503));
+    if (attempt < 3) await vi.advanceTimersToNextTimerAsync();
+  }
+  await first;
+  h.live.state({ status: "retrying", routes: [] });
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(h.archives.snapshot()).toMatchObject({
+    status: "error",
+    transient: true,
+  });
+  expect(h.query).toHaveBeenCalledTimes(4);
+  h.live.state({ status: "connected", routes: [] });
+  h.wire.next().respond([snapshot()]);
+  await h.archives.ensure({ background: true });
+  expect(h.archives.state(target.pubkey)).toBe("archived");
+  expect(h.query).toHaveBeenCalledTimes(5);
+});
+
+it("reconciles an active read completed during an outage on reconnect", async () => {
+  const h = harness();
+  h.live.state({ status: "connected", routes: [] });
+  const first = h.archives.ensure({ background: true });
+  const held = h.wire.next();
+  expect(h.archives.ensure()).toBe(first);
+  h.live.state({ status: "retrying", routes: [] });
+  held.respond([snapshot()]);
+  await first;
+  expect(h.archives.state(target.pubkey)).toBe("archived");
+  h.live.state({ status: "connected", routes: [] });
+  expect(h.archives.snapshot().status).toBe("idle");
+  const reconciled = h.archives.ensure({ background: true });
+  h.wire.next().respond([snapshot(2, [])]);
+  await reconciled;
+  expect(h.archives.state(target.pubkey)).toBe("not-archived");
+  expect(h.query).toHaveBeenCalledTimes(2);
+});
 it.each(["sidebar", "active"] as const)(
   "keeps %s recovery demand through a socket drop",
   async (demand) => {
@@ -135,7 +199,7 @@ it.each(["sidebar", "active"] as const)(
     const retry = h.wire.next();
     expect(h.query).toHaveBeenCalledTimes(5);
     h.live.state({ status: "retrying", routes: [] });
-    expect(retry.signal?.aborted).toBe(background);
+    expect(retry.signal?.aborted).toBe(false);
     if (!background) {
       retry.respond([snapshot()]);
       await h.archives.ensure();
@@ -143,13 +207,15 @@ it.each(["sidebar", "active"] as const)(
       expect(h.query).toHaveBeenCalledTimes(5);
       return;
     }
+    retry.respond([snapshot()]);
     await vi.advanceTimersByTimeAsync(120_000);
     expect(h.query).toHaveBeenCalledTimes(5);
     h.live.state({ status: "connected", routes: [] });
+    const reconciliation = h.archives.ensure({ background: true });
     const resumed = h.wire.next();
     expect(h.query).toHaveBeenCalledTimes(6);
     resumed.respond([snapshot()]);
-    await h.archives.ensure();
+    await reconciliation;
     expect(h.archives.snapshot().status).toBe("ready");
   },
 );
@@ -516,12 +582,10 @@ it.each(
   },
 );
 
-it("an active ensure reads healthy HTTP while sidebar demand waits for the socket", async () => {
+it("an active ensure reads healthy HTTP while the socket is down", async () => {
   const h = harness();
   h.live.state({ status: "connected", routes: [] });
   h.live.state({ status: "retrying", routes: [] });
-  await h.archives.ensure({ background: true });
-  expect(h.query).not.toHaveBeenCalled();
   const active = h.archives.ensure();
   const req = h.wire.next();
   h.live.state({ status: "connected", routes: [] });

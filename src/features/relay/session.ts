@@ -2653,7 +2653,7 @@ export function createRelaySession(
               state.status !== "unavailable" &&
               Date.now() >= (state.retryAt ?? 0)
             )
-              void archives.retry();
+              void archives.retry(liveSnapshot.status === "connected");
           },
         ),
         recoverable(
@@ -4131,7 +4131,7 @@ export function createRelaySession(
         liveSnapshot.status !== "connected" &&
         (liveGeneration > 0 || archives.queries.snapshot().status === "error")
       )
-        archives.connected(true);
+        archives.stale();
       if (
         snapshot.status !== "connected" &&
         liveSnapshot.status === "connected"
@@ -4148,7 +4148,6 @@ export function createRelaySession(
         requests.invalidate((filters) => !isArchiveRead(filters));
         repositories.clearHomes();
         agentLibrary.clear();
-        archives.connected(false);
         workflows.interrupt();
         streamDropped = true;
         channels.staleHeads();

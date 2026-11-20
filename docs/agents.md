@@ -1315,18 +1315,17 @@ A successful snapshot replaces the entire list; newer timestamps / lower-id ties
 win. A session-local ordering fence survives cache clear, without retaining old
 archive contents; it is not persistent rollback protection across sessions/devices.
 Channel-access changes preserve relay-wide archive evidence and its pending read.
-Explicit cache clear and session disposal discard it and cancel work. Disconnect
-retires background snapshot reads while retaining known visibility. Active reads,
-archive actions and their confirmation use HTTP or native IPC independently of
-the live socket. Only background sidebar demand waits for connection recovery,
-which resumes recorded demand once. Recovery retries preserve the original
-background or active demand; an active consumer can join a loading sidebar read
-and keep it alive across a socket drop. First connection preserves a pending or
-successful startup read and retries a failed one.
+Explicit cache clear and session disposal discard it and cancel work. The sidebar
+starts a new read only with eligible DMs and a connected socket. An existing finite
+read, archive action or confirmation can finish over healthy HTTP or native IPC
+during socket loss. Reconnect stales settled evidence once and coalesces with a
+read still in flight; first connection preserves a successful explicit startup read.
+Recovery retains transient failures across socket changes. New sidebar recovery
+reads wait for connection; an active mention, template or member-add consumer can
+claim the same read or deferred retry without shortening its admission deadline.
 Transient failures also join the session's existing capped recovery backoff,
 respecting relay admission delays across socket loss, reconnect and first connect.
-Invalid snapshots and access refusals wait
-for an explicit refresh or connection change.
+Invalid snapshots and access refusals wait for an explicit refresh or connection change.
 No periodic poll, event-union seeding or history filtering is added.
 
 This is finite evidence, not a live archive directory.
@@ -1334,9 +1333,12 @@ As in base Buzz, mention autocomplete, the
 mention picker and member-add omit archived identities: fail-open while the
 snapshot is unknown, never hiding the viewer from themself, and never touching
 history or channel membership. The sidebar also omits a one-to-one DM when its
-single other participant is known archived, preserving group DMs, open views,
+single other participant is known archived and its row is read. An unread DM stays
+visible until read; a new unread message restores it. This preserves group DMs, open views,
 search access and independent manual hiding. Unarchive restores its row when
-refreshed evidence arrives. The sidebar demands a snapshot only when its roster
+Buzz reconnects or restarts and refreshes the evidence. Unknown startup evidence
+remains fail-open, so an archived row may appear before the initial read completes.
+The sidebar demands a snapshot only when its roster
 contains an eligible one-to-one DM. `not-archived` means absent from the read snapshot, not online,
 owned, authorized or guaranteed current at a later write. Delta processing and
 packaged/live acceptance remain separate.
