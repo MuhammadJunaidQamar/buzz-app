@@ -378,6 +378,7 @@ export function createIdentityArchives(
       request,
     }),
     clear,
+    stale,
     connected(value: boolean) {
       paused = !value;
       if (!value) {
