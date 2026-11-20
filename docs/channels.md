@@ -224,7 +224,7 @@ Create event, with the same UUID and signature, so a delivered first attempt is
 not duplicated; changed details abandon that attempt and sign a new one. Closing
 the dialog forgets the attempt and dismisses its Outbox entry. Nothing restores
 after reopening, reload or session replacement, so a stale Create can never lock
-the form; an entry left behind by a reload stays unretried in the Outbox. Setup failures after admission produce a dismissible notice
+the form; an entry left behind by a reload stays unretried in the Outbox, which only developer builds show. Setup failures after admission produce a dismissible notice
 without navigating again; setup is never continued in the background. New-chat intent uses the Channels version-1
 page route `{ kind: "solo-draft", project?, agent? }` (see [Solo](solo/README.md));
 only that intent, never draft text, enters history.

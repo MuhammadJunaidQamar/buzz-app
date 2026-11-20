@@ -1048,8 +1048,8 @@ and are asked to sign in again in Buzz.
   After its 15-minute
   delivery window, Buzz verifies the original command and current membership
   before allowing a fresh participation invitation; failed checks keep the original.
-  If the original invitation was applied and the person was later removed, Retry
-  clears the old row without re-adding them. Use **Add** in People to invite them again.
+  If the original invitation was applied and the person was later removed, use
+  **Add** in People to invite them again.
 - **Open links in your browser**: on desktop, ⌘-click (Ctrl-click on Windows
   and Linux) an HTTP(S) link in a message to open it in your default browser
   instead of a side panel. You can also right-click the link and choose

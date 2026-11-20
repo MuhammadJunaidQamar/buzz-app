@@ -273,7 +273,7 @@ other labels, lifetime and workspace. An unfiled chat moves from Solo to Team.
 Share attempts retain in-process intent plus durable per-operation Outbox receipts,
 not a persisted composite transaction. Start over forgets settled choices, not
 submitted operations, confirmed access or workspace filing.
-An interrupted link can be retried by its exact ID in Outbox; confirmed delivery
+In developer builds, an interrupted link can be retried by its exact ID in Outbox; confirmed delivery
 can be removed there before sharing to the same destination again. Unknown
 receipts remain protected. Whole-share intent does not survive an app restart.
 
