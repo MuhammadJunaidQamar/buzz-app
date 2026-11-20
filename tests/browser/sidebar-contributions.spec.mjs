@@ -728,13 +728,15 @@ appTest.describe("Solo header accessories", () => {
         );
         await expect(time).toHaveCount(1);
         await page.keyboard.press("Escape");
-        await expect(menu).toBeHidden();
+        await expect(menu).toHaveCount(0);
       }
       const work = headers[0].group;
       const workActions = work.getByRole("button", {
         name: "Actions for Work",
       });
       const workTitle = work.getByRole("button", { name: "Work", exact: true });
+      // Start with focus in Work. WebKit pointer clicks can keep prior focus.
+      await workTitle.focus();
       await workTitle.hover();
       await workActions.click();
       await expect(
