@@ -1733,7 +1733,8 @@ the emoji-only picker
 through its optional conversation tool `reactionComponent`; the shared message
 row owns publication. The picker opens outside the scrolling list, closes on
 selection or Escape, and returns focus to the plus button. Failed or unconfirmed
-reaction delivery offers Retry reaction through the same outbox. Read-only
+reaction delivery offers Retry reaction through the same outbox; past the relay's
+15-minute window it sends the update again as a new event. Read-only
 connections and archived channels do not expose the action.
 
 The composer shows its GIF tab as soon as relay support is confirmed. Unsupported

@@ -450,6 +450,57 @@ it("keeps failed first-reaction delivery visible and retries the same event", as
   });
   expect(publish.mock.calls[1]?.[0]).toEqual(original);
 });
+/** Past 15 minutes the relay refuses the old signed event, so Retry signs a new one. */
+it.each([
+  ["a failed reaction", false],
+  ["an unconfirmed removal of a reaction", true],
+] as const)(
+  "retries %s as a new event once the relay no longer takes the old one",
+  async (_name, removal) => {
+    let outcome: "refuse" | "lose" | "accept" = removal ? "lose" : "refuse";
+    const publish = vi.fn(async (event: RelayEvent) => {
+      if (event.created_at < Math.floor(Date.now() / 1000) - 15 * 60)
+        throw new PublishRejected("Too old");
+      if (outcome === "refuse") throw new PublishRejected("Nope");
+      if (outcome === "lose") throw new Error("Connection lost");
+    });
+    const mine = react();
+    const h = harness(removal ? [mine] : [], publish);
+    render(<h.Controls />);
+    fireEvent.click(
+      removal
+        ? screen.getByRole("button", { name: "👍: You" })
+        : within(screen.getByTestId("reaction-controls")).getByRole("button", {
+            name: "Choose reaction",
+          }),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    const [stuck] = h.session.outbox?.snapshot() ?? [];
+    expect(stuck?.delivery).toBe(removal ? "unknown" : "failed");
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 16 * 60_000);
+    outcome = "accept";
+    fireEvent.click(screen.getByRole("button", { name: "Retry reaction" }));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    const sent = publish.mock.calls.at(-1)?.[0];
+    expect(sent?.id).not.toBe(stuck?.event.id);
+    expect(sent?.kind).toBe(stuck?.event.kind);
+    expect(sent?.content).toBe(stuck?.event.content);
+    expect(sent?.tags.filter(([name]) => name === "client-id")).toHaveLength(1);
+    expect(h.session.outbox?.snapshot().map((item) => item.event.id)).toEqual([
+      sent?.id,
+    ]);
+    expect(screen.queryByRole("button", { name: "Retry reaction" })).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    vi.restoreAllMocks();
+  },
+);
 it("prevents duplicate submissions and unavailable-message actions", async () => {
   const h = harness();
   const view = render(<h.Controls disabled />);

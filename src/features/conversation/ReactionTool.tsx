@@ -6,7 +6,7 @@ import type { ComposerTool, ContributionReader } from "./contracts";
 import type { Contribution } from "../../plugins/contributions";
 import { ContributionBoundary, contributionKey } from "./ContributionBoundary";
 import { messageViewKey } from "../messages/view-key";
-import type { Outbox } from "../relay/outbox";
+import type { Outbox, OutgoingEvent } from "../relay/outbox";
 
 const toolOrder = (tool: ComposerTool) =>
   Number.isFinite(tool.order) ? (tool.order ?? 0) : 0;
@@ -132,6 +132,19 @@ export function reactionTarget(event: Pick<EventData, "kind" | "tags">) {
     : undefined;
 }
 
+/** The relay refuses a signed event after 15 minutes, so an older update is
+ * sent again as a new event for the same reaction. */
+function retryReaction(outbox: Outbox, item: OutgoingEvent) {
+  const { id, kind, content, tags, created_at } = item.event;
+  if (Date.now() / 1000 - created_at < 15 * 60) return outbox.retry(id);
+  outbox.send({
+    kind,
+    content,
+    tags: tags.filter(([name]) => name !== "client-id" && name !== "ms"),
+  });
+  outbox.dismiss(id).catch(() => {});
+}
+
 export function ReactionDelivery({
   session,
   messageId,
@@ -160,7 +173,7 @@ export function ReactionDelivery({
         size="sm"
         variant="ghost"
         type="button"
-        onClick={() => outbox?.retry(operation.event.id)}
+        onClick={() => outbox && retryReaction(outbox, operation)}
       >
         Retry reaction
       </Button>
