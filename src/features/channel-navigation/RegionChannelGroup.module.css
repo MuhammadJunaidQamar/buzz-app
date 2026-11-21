@@ -69,6 +69,13 @@
     opacity: 0;
   }
 
+  /* Keep the native Actions button at the edge when the task action is present. */
+  .teamRow:has(> :first-child > [data-channel-row-action])
+    > .teamRowSlot
+    > [data-solo-channel-new-task] {
+    inset-inline-end: calc(var(--space-2) + var(--size-control-sm));
+  }
+
   /* On the row's pill the action darkens instead of gaining its own fill. */
   .teamRow
     > .teamRowSlot
@@ -77,10 +84,16 @@
     color: var(--text-navigation);
   }
 
-  /* The row stays highlighted while the pointer is on its controls. */
-  .teamRow:has(> .teamRowSlot > :not(.teamRowBody):hover)
-  > :first-child:not([data-selected])::before {
-    background: var(--affordance-panel-hover);
+  /* The portaled controls are part of the same row's hover target. */
+  .teamRow:has(> .teamRowSlot > :not(.teamRowBody):hover) > :first-child {
+    &:not([data-selected])::before {
+      background: var(--affordance-panel-hover);
+    }
+
+    & > [data-channel-row-action] {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
 
   /* The disclosure takes the row icon's place while the row is pointed at

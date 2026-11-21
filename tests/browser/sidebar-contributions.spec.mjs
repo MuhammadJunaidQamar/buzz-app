@@ -515,6 +515,35 @@ appTest.describe("Solo header accessories", () => {
     });
   };
 
+  appTest(
+    "keeps Team channel Actions and New task separately clickable",
+    async ({ page, app }) => {
+      await admitNewTask(page);
+      await page.goto(
+        `${app.origin}/?solo-region-fixture&team-row-channel-group`,
+      );
+      await openPage(page, "Messages");
+      const group = page.locator('[data-team-row-channel-group="alpha"]');
+      const actions = group.getByRole("button", { name: "Actions for Alpha" });
+      const newTask = group.getByRole("button", { name: "New task in Alpha" });
+      const draft = group.getByRole("textbox", { name: "New task title" });
+      await group.getByRole("button", { name: "Alpha", exact: true }).hover();
+      await expect(actions).toHaveCSS("opacity", "1");
+      await expect(newTask).toHaveCSS("opacity", "1");
+      await actions.click();
+      const menu = page.getByRole("menu", { name: "Actions for Alpha" });
+      await expect(menu).toBeVisible();
+      await expect(draft).toHaveCount(0);
+      await menu.getByRole("menuitem").first().focus();
+      await page.keyboard.press("Escape");
+      await expect(menu).toBeHidden();
+      await newTask.hover();
+      await expect(actions).toHaveCSS("opacity", "1");
+      await newTask.click();
+      await expect(draft).toBeVisible();
+    },
+  );
+
   // Real hit testing catches an accessory covered by the workspace selection
   // target. Text truncation, the trailing swap and focus use browser layout.
   appTest(
