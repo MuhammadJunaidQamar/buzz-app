@@ -602,3 +602,43 @@ test("keyboard selection steps to the reply beside it when the virtual list left
     await server.close();
   }
 });
+
+test("thread rows keep accepting pointer input while the list scrolls", async ({
+  page,
+}) => {
+  const server = await createServer({
+    root: fileURLToPath(new URL("../../", import.meta.url)),
+    configFile: false,
+    envFile: false,
+    plugins: [react()],
+    logLevel: "error",
+    server: { host: "127.0.0.1", port: 0, strictPort: false },
+  });
+  await server.listen();
+  try {
+    await page.goto(
+      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/messages.html?threadWindow=1`,
+    );
+    const history = page.getByRole("region", { name: "Thread messages" });
+    await expect.poll(() => threadReplyCount(history)).toBe(10);
+    await history.hover();
+    const seen = history.evaluate(
+      (el) =>
+        new Promise((resolve) => {
+          const list = el.querySelector("[data-thread-rows] > ol");
+          const states = new Set();
+          const end = performance.now() + 600;
+          const sample = () => {
+            states.add(getComputedStyle(list).pointerEvents);
+            if (performance.now() < end) requestAnimationFrame(sample);
+            else resolve([...states]);
+          };
+          sample();
+        }),
+    );
+    await page.mouse.wheel(0, -120);
+    expect(await seen).toEqual(["auto"]);
+  } finally {
+    await server.close();
+  }
+});

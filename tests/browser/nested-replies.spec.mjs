@@ -516,11 +516,14 @@ test("branch hooks land on each reply's avatar across sides and row shapes", asy
   }
   await expect(row(startReply)).toBeVisible();
   for (const event of [agentPeerReply, ownAgentsLeft, ownAgents]) {
-    await panel
-      .getByRole("button", {
-        name: new RegExp(`^Show activity history: .*: ${event.content}$`),
-      })
-      .click();
+    const show = panel.getByRole("button", {
+      name: new RegExp(`^Show activity history: .*: ${event.content}$`),
+    });
+    await expect(async () => {
+      await threadIdle(panel);
+      if (await show.count()) await show.click({ timeout: 2000 });
+      await expect(show).toHaveCount(0, { timeout: 1000 });
+    }).toPass({ timeout: 15000 });
   }
 
   // Peer- and viewer-started branches hook on their own side; a reply on the

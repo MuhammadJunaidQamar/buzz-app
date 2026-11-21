@@ -950,25 +950,26 @@ function ThreadMessages({
       };
     };
   }, [messageId, navigation?.signal]);
-  const selectedOffset = useCallback(() => {
+  // The row's place in the viewport, not in the scroll range: Virtua corrects
+  // scrollTop itself as it measures rows above, which moves the row's offset
+  // and scrollTop together before this panel hears of it.
+  const selectedPosition = useCallback(() => {
     const row = selectedRow();
     const container = scroller.current;
     return row && container
-      ? row.getBoundingClientRect().top -
-          container.getBoundingClientRect().top +
-          container.scrollTop
+      ? row.getBoundingClientRect().top - container.getBoundingClientRect().top
       : undefined;
   }, [selectedRow]);
   const completeTarget = useCallback(() => {
     // Exact lookup can finish before context. Preserve this row's reading
     // position through prepended history without refocusing it after opening.
-    targetAnchor.current = selectedOffset();
+    targetAnchor.current = selectedPosition();
     setInitialPositioned(true);
     captureResizePosition();
     readingSettled.current = true;
     readingPositioned(scroller.current);
     navigation?.complete({ status: "opened" });
-  }, [captureResizePosition, navigation, selectedOffset]);
+  }, [captureResizePosition, navigation, selectedPosition]);
   const prepareTarget = useCallback(() => {
     follow.current = false;
   }, []);
@@ -1710,10 +1711,10 @@ function ThreadMessages({
       }
     }
     if (targetAnchor.current !== undefined) {
-      const offset = selectedOffset();
+      const offset = selectedPosition();
       if (offset !== undefined) {
         correctScrollTop(element, offset - targetAnchor.current);
-        targetAnchor.current = offset;
+        targetAnchor.current = selectedPosition() ?? offset;
         follow.current = false;
       }
       if (snapshot.status !== "loading" && walked)
@@ -1793,7 +1794,7 @@ function ThreadMessages({
     rootTarget,
     returning,
     revealed,
-    selectedOffset,
+    selectedPosition,
     tree,
     expanded,
     expandedActivity,
@@ -1888,7 +1889,7 @@ function ThreadMessages({
       // Exact-history restoration must start from this corrected geometry,
       // rather than applying the same child-only height delta a second time.
       if (targetAnchor.current !== undefined)
-        targetAnchor.current = selectedOffset();
+        targetAnchor.current = selectedPosition();
       if (olderAnchor.current) {
         const row = element.querySelector<HTMLElement>(
           `[data-message-id="${olderAnchor.current.id}"]`,
@@ -1901,7 +1902,7 @@ function ThreadMessages({
     observer.observe(content);
     observer.observe(end);
     return () => observer.disconnect();
-  }, [active, initialPositioned, captureResizePosition, selectedOffset]);
+  }, [active, initialPositioned, captureResizePosition, selectedPosition]);
   const jumpToLatest = () => {
     const element = scroller.current;
     if (!element) return;
@@ -2528,6 +2529,7 @@ function ThreadMessages({
         <MessageContextMenus keepMounted={keepRowMounted}>
           <div
             ref={threadRows}
+            className={styles.threadRows}
             data-thread-rows=""
             data-activity-history-scope=""
             inert={positioning}

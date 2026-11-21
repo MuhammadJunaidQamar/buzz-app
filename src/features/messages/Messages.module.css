@@ -1029,6 +1029,15 @@ html[data-keyboard-navigation] .attachmentImage:focus-visible {
   pointer-events: none;
 }
 
+/* Virtua ignores pointer events on its list while it scrolls and for a moment
+   after. This panel scrolls itself to hold positions as rows measure, so a
+   press that began before such a correction would release on the list's
+   ancestor and the toggle or button under it would never be clicked. */
+.threadRows > ol {
+  /* biome-ignore lint/complexity/noImportantStyles: Must win over Virtua's inline style. */
+  pointer-events: auto !important;
+}
+
 .threadHistory {
   --message-hover-inset: var(--space-4);
   --timeline-measure: var(--buzz-message-width, 52rem);

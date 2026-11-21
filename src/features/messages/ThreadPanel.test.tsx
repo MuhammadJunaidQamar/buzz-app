@@ -2928,6 +2928,59 @@ it("a retained reader reveals its exact selected message, again for each new req
   expect(revealedReply()).toBe(false);
 });
 
+it("an exact target keeps its place in the viewport when a page lands after rows above it resized", async () => {
+  const { linked } = visitPlaces();
+  const reply = (id: string, createdAt: number) => ({
+    ...row,
+    id: id.repeat(64),
+    content: `reply ${id}`,
+    replyParentId: row.id,
+    createdAt,
+  });
+  const target = reply("d", 5);
+  const navigation = linked("exact-visit", undefined, target.id);
+  const h = messagesHarness(navigation);
+  const offsets = new Map([[target.id, 300]]);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      const offset = offsets.get(this.dataset.messageId ?? "");
+      return offset === undefined
+        ? new DOMRect(0, 0, 500, 600)
+        : new DOMRect(
+            0,
+            offset - (this.closest("[data-message-scroller]")?.scrollTop ?? 0),
+            500,
+            40,
+          );
+    },
+  );
+  h.snapshot.replies = [target];
+  h.snapshot.target = target;
+  h.snapshot.targetStatus = "ready";
+  h.snapshot.direction = "older";
+  h.snapshot.canLoadMore = true;
+  Object.assign(h.props as ThreadPanelProps, { messageId: target.id });
+  h.render();
+  await waitFor(() =>
+    expect(navigation.complete).toHaveBeenCalledWith({ status: "opened" }),
+  );
+  // The reader has scrolled on with the target 300 px into the viewport; the panel
+  // learns of it from the resize.
+  offsets.set(target.id, 2300);
+  h.element.scrollTop = 2000;
+  h.resize(4100);
+  h.deliverResize();
+  // Virtua measures rows above the target and moves scrollTop with them
+  // before the panel hears of it: the target keeps its place in the viewport.
+  offsets.set(target.id, 2222);
+  h.element.scrollTop = 1922;
+  // An older page lands above, shifting the target 1,000 px down the range.
+  offsets.set(target.id, 3222);
+  h.snapshot.replies = [reply("c", 4), reply("b", 3), target];
+  h.render();
+  expect(h.element.scrollTop).toBe(2922);
+});
+
 it("an open relayed group stays open when paging adds an earlier member", async () => {
   const h = messagesHarness();
   const relayed = ["d", "e", "f"].map((id, index) => ({
