@@ -2,7 +2,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import { ToastNotice } from "../../shared/design-system/ui/Toast";
 import { isSignInRefusal, type RelayRecovery } from "./recovery";
 import type { RelaySession } from "./session";
-import { headReadPending } from "./live-recovery";
+import { headReadPending, headRecovering } from "./live-recovery";
 
 const NONE = Object.freeze({
   recovering: false,
@@ -90,6 +90,16 @@ export function useRecoveryOwns(
   const read = () => owns(session.live.snapshot());
   const owned = useSyncExternalStore(session.live.subscribe, read, read);
   return recovering && owned;
+}
+
+/** headRecovering for one channel, as live state: false once nothing in the
+ * live source is still coming to read its head. */
+export function useHeadRecovering(
+  live: RelaySession["live"] | undefined,
+  channelId: string,
+) {
+  const read = () => !!live && headRecovering(live.snapshot(), channelId);
+  return useSyncExternalStore(live?.subscribe ?? subscribeNone, read, read);
 }
 
 /** headReadPending for one channel, as live state. */

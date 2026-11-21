@@ -13,9 +13,8 @@ import { holdReadingFocus, markAllRead } from "./reading.mjs";
 // Each open path runs with all reads prompt, then with one class of read held
 // until well after the open: membership notices, author profiles or read
 // state. A held read is released only once Alpha has painted, or once the open
-// waits on that held read itself, so it lands after the first paint. Known
-// failures are marked as expected below; a fix that makes one pass fails the
-// run until its mark is removed.
+// waits on it: on a held head read, or with its first screen held. So it lands
+// either after the first paint or while that screen waits for it.
 
 const UNREAD = 4;
 
@@ -65,16 +64,20 @@ function recorder() {
     const scroller = document.querySelector(
       '[aria-label="Channel message history"]',
     );
-    const line = scroller?.querySelector("[data-new-messages-boundary]");
+    // A timeline laid out hidden paints nothing yet.
+    const shown = !!scroller && getComputedStyle(scroller).opacity !== "0";
+    const line = shown
+      ? scroller.querySelector("[data-new-messages-boundary]")
+      : null;
     const viewportTop = scroller?.getBoundingClientRect().top ?? 0;
     const frame = {
       channel: timeline?.getAttribute("data-channel-timeline") ?? null,
       scrollTop: scroller ? Math.round(scroller.scrollTop) : null,
-      rows: scroller ? visibleRows(scroller) : [],
+      rows: shown ? visibleRows(scroller) : [],
       line: line
         ? Math.round(line.getBoundingClientRect().top - viewportTop)
         : null,
-      jump: timeline?.hasAttribute("data-jump-visible") ?? false,
+      jump: shown && !!timeline?.hasAttribute("data-jump-visible"),
     };
     const key = JSON.stringify(frame);
     if (key !== state.last) {
@@ -225,17 +228,23 @@ async function instrument(page, app, held) {
       gate = held === "none" ? undefined : Promise.withResolvers();
     },
     /** Release once Alpha has painted rows, or once its open is waiting on
-     * a held head read (callers have seen Alpha's composer). */
+     * a held read: a held head read, or a timeline that holds its first
+     * screen (callers have seen Alpha's composer). */
     async release() {
       await expect
         .poll(
           async () =>
             heldHeads > 0 ||
-            (await page.evaluate(() =>
-              window.firstPaint.frames.some(
-                (frame) => frame.channel === "alpha" && frame.rows.length > 0,
-              ),
+            (await page.evaluate(
+              () =>
+                !!document.querySelector(
+                  '[data-channel-timeline="alpha"][data-first-screen="pending"]',
+                ) ||
+                window.firstPaint.frames.some(
+                  (frame) => frame.channel === "alpha" && frame.rows.length > 0,
+                ),
             )),
+          { intervals: [16] },
         )
         .toBe(true);
       gate?.resolve();
@@ -305,6 +314,12 @@ const unread = (app, content, deliver, createdAt) =>
 async function seed(page, app) {
   await holdReadingFocus(page);
   await page.addInitScript(recorder);
+  await page.addInitScript(() => {
+    // A path moves the clock past a head's freshness lease (`FRESH_FOR`).
+    const real = Date.now;
+    window.clockSkew = 0;
+    Date.now = () => real() + window.clockSkew;
+  });
   await page.addInitScript(() => {
     // `saveData` switches off background warming and hover preparation. It
     // stays on until a path turns it off, so nothing reads Alpha early.
@@ -407,6 +422,23 @@ const paths = {
     gates.arm();
     await clickOpen(page, "Alpha");
   },
+  // Past the head's freshness lease the revisit re-reads it. The window
+  // followed the stream meanwhile, so the first screen does not wait for it.
+  async lateRevisit(page, _app, gates) {
+    gates.arm();
+    await sidebarRow(page, "Alpha").click();
+    await expect(composer(page, "Alpha")).toBeVisible();
+    await gates.release();
+    await gates.idle();
+    await sidebarRow(page, "Beta").click();
+    await expect(composer(page, "Beta")).toBeVisible();
+    await gates.idle();
+    await page.evaluate(() => {
+      window.clockSkew += 61_000;
+    });
+    gates.arm();
+    await clickOpen(page, "Alpha");
+  },
   async saved(page, _app, gates, newest) {
     // Alpha's head is saved on screen; the reload reopens Alpha from it.
     await sidebarRow(page, "Alpha").click();
@@ -440,44 +472,11 @@ const paths = {
       .toBe(true);
     // The catch-up reads Alpha's retained head in the background. While the
     // reconnect's profile or read-state reads are held, it does not start, so
-    // those journeys open on the stale head.
+    // those journeys open on the stale head and wait for the catch-up.
     if (held === "none" || held === "notices")
       await expect.poll(() => gates.requests.length).toBeGreaterThan(0);
     await gates.idle();
     await clickOpen(page, "Alpha");
-  },
-};
-
-// path → held reads that currently fail, with the cause. Measured in headless
-// Chromium and WebKit against the fixture relay.
-const names =
-  "Notice rows paint before their names: a head read names only its message authors; notice actors and targets are read only once the window adopts the head";
-const lineAfterRows =
-  "The New messages line draws a render after the prepared head's rows, and its 24px divider moves them";
-const lineWaitsForReadState =
-  "The line waits for the read-state snapshot, then inserts its 24px divider and moves the rows";
-const staleReconnect =
-  "The reconnect catch-up has not read Alpha's retained head, so the missed row, its regrouping and the line arrive after paint";
-const knownFailures = {
-  cold: {
-    profiles: names,
-    readState: lineWaitsForReadState,
-  },
-  hover: {
-    none: lineAfterRows,
-    profiles: `${lineAfterRows}. ${names}`,
-    readState: lineWaitsForReadState,
-  },
-  saved: Object.fromEntries(
-    Object.keys(holds).map((held) => [
-      held,
-      "A saved head paints as cached; the line waits for the head read that verifies it, then its 24px divider moves the rows",
-    ]),
-  ),
-  reconnect: {
-    notices: `Holding notices holds the catch-up head read itself. ${staleReconnect}`,
-    profiles: staleReconnect,
-    readState: staleReconnect,
   },
 };
 
@@ -487,8 +486,6 @@ for (const path of Object.keys(paths))
       page,
       app,
     }, testInfo) => {
-      const cause = knownFailures[path]?.[held];
-      test.fail(!!cause, cause);
       const newest = await seed(page, app);
       const gates = await instrument(page, app, held);
       await paths[path](page, app, gates, newest, held);

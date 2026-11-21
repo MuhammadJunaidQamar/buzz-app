@@ -119,6 +119,9 @@ type MessageVisit = Readonly<{
     Pick<MessageAttention, "unread" | "forced"> | null
   >;
   active: boolean;
+  /** Inactive only until the cached channel list is verified: whether the
+   * viewer is a member, and so whether the visit becomes active, is unknown. */
+  settling: boolean;
   ready: boolean;
   failed: boolean;
 }>;
@@ -269,6 +272,11 @@ export function MessageManagement({
         ? channel.id
         : undefined,
   );
+  const settling = useListedChannel(
+    session.channels,
+    channelId,
+    (channel) => !!active && !!channel?.cached,
+  );
   // The timeline may mount only after loading or an inline seek completes.
   // Entry membership and provisional read evidence belong to this visit, not
   // to that later render or the first complete read snapshot.
@@ -373,10 +381,11 @@ export function MessageManagement({
       entryReadRevision: visit.entryReadRevision,
       entryAttention: visit.entryAttention,
       active: !!visit.visitChannelId,
+      settling: !visit.visitChannelId && settling,
       ready: notice.visit === visit && notice.entryReady,
       failed: notice.visit === visit && notice.entryFailed,
     }),
-    [visit, notice.visit, notice.entryReady, notice.entryFailed],
+    [visit, settling, notice.visit, notice.entryReady, notice.entryFailed],
   );
   useEffect(() => {
     const { session, visitChannelId } = visit;

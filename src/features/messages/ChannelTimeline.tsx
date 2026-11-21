@@ -51,7 +51,11 @@ import type {
 } from "../relay/contracts";
 import { useRowProfiles } from "../relay/react";
 import { useHeaderChannel } from "../relay/listed-channel";
-import { useHeadReadPending, useRecovery } from "../relay/RecoveryNotice";
+import {
+  useHeadReadPending,
+  useHeadRecovering,
+  useRecovery,
+} from "../relay/RecoveryNotice";
 import { geometryFor, geometrySignature } from "./geometry";
 import { readView, writeView } from "../../shared/view-state";
 import styles from "./Messages.module.css";
@@ -70,6 +74,7 @@ import { JumpToLatestButton } from "./JumpToLatestButton";
 import { moveMessageSelection } from "./message-selection";
 import { useMessageSelection } from "./use-message-selection";
 import { useMessageVisit } from "./MessageManagement";
+import { rowProfileIds } from "../relay/membership";
 
 // Native upward scrolling can start on a focused message link or button.
 // Inner scrollports own the key while they can move. At their top boundary,
@@ -137,6 +142,15 @@ const visitBoundaries = new WeakMap<
   { boundary: NewMessageBoundary; baseline: NewMessageBoundaryBaseline }
 >();
 const unknownUnreadSync = Object.freeze({ completeness: "unknown" as const });
+/** A visit's first screen, from the timeline laying it out hidden until it is
+ * shown. `epoch` names the opening; a settling visit's carries on. */
+type Opening = {
+  epoch: object;
+  token: object;
+  settling: boolean;
+  shown: boolean;
+  expired: boolean;
+};
 /** What the reader had in front of them when the window lost attention. */
 type AwayBaseline = {
   token: object;
@@ -155,6 +169,12 @@ function subscribeDocumentActive(listener: () => void) {
   };
 }
 const TIMELINE_PLACE = "timeline";
+// How long a visit's first screen may wait for its line and names.
+const FIRST_SCREEN_WAIT_MS = 500;
+const noUnnamed: ReadonlySet<string> = new Set();
+const unnamedProfiles =
+  (profiles: RelaySession["profiles"]) => (): ReadonlySet<string> =>
+    profiles.unnamed?.() ?? noUnnamed;
 // Older pages a visit reads unasked to fill a screen its head leaves empty.
 const FILL_PAGES = 5;
 // A row's content sits below its day divider and byline, and its virtual item
@@ -466,7 +486,17 @@ function Timeline({
   // flight. The store marks a page verified when any page lands, so an older
   // page read meanwhile says nothing about the head still being read.
   const headPending = useHeadReadPending(queries.live, channelId);
+  // The live source will still read the channel's head: a dropped stream's
+  // route is re-establishing, or its catch-up is queued or retrying.
+  const headComing = useHeadRecovering(queries.live, channelId);
   const awaitingHead = window.refreshing === true || headPending;
+  // A verified window has followed the live stream since its head read (a
+  // drop marks it cached), so re-reading it after its freshness lease brings
+  // nothing that arrived before the visit: entry waits only on rows that
+  // its head read has yet to verify.
+  const entryAwaitingHead =
+    headPending ||
+    (window.refreshing === true && window.freshness !== "verified");
   const boundaryBaseline = useRef<NewMessageBoundaryBaseline | undefined>(
     retainedVisit?.baseline,
   );
@@ -498,7 +528,7 @@ function Timeline({
     !baseline.messageIds &&
     window.status === "ready" &&
     window.freshness === "verified" &&
-    !awaitingHead
+    !entryAwaitingHead
   )
     baseline.messageIds = new Set(window.rows.map((row) => row.id));
   // Rows that can be unread, and so can define or witness a boundary.
@@ -535,26 +565,27 @@ function Timeline({
       queries.unread.revision() !== baseline.revision
     )
       return { ready: true };
+    // Rows that nothing will verify (their head read failed, was cancelled or
+    // was never sent), or evidence whose repair failed, can place no line:
+    // the visit settles without one rather than hold its first screen.
+    if (
+      (window.status === "ready" &&
+        window.freshness !== "verified" &&
+        !entryAwaitingHead &&
+        !headComing) ||
+      (unreadSnapshot?.freshness === "stale" &&
+        unreadSnapshot.error !== undefined &&
+        !unreadSnapshot.sampling)
+    )
+      return { ready: true };
     if (
       window.status !== "ready" ||
       window.freshness !== "verified" ||
-      awaitingHead ||
+      entryAwaitingHead ||
       window.loadingOlder ||
       unreadSync.completeness !== "snapshot"
     )
-      return {
-        ready: false,
-        // Rows are on screen and the head read that verifies them is running
-        // or queued: a revisit past the head's freshness lease, rows restored
-        // from disk, a catch-up queued behind another. Dwell is shorter than
-        // a slow read, so this list's own reading is held for that wait too.
-        // The hold follows the read itself, not the page's freshness: a read
-        // that settles, fails or is cancelled ends it, and unverified rows
-        // that nothing is reading (a saved session that cannot connect, a
-        // cancelled catch-up) never start it. The visit then waits without
-        // holding reading, so no page state can keep the channel unread.
-        awaitingPage: window.status === "ready" && awaitingHead,
-      };
+      return { ready: false };
     if (
       unreadSnapshot?.coverage !== "observed" ||
       unreadSnapshot?.freshness !== "observed"
@@ -570,10 +601,9 @@ function Timeline({
       // Every relay read feeds the store, so until its repair has sampled
       // history it may know only the loaded rows, and its oldest unread one
       // can sit in the window below any read row while older ones are unread.
-      // This gate holds this list's own reading as well: every earlier one
-      // has passed, so the repair alone is awaited. A repair that ended
-      // without sampling (failed, overflowed, abandoned) settles the visit
-      // with no line, so reading never waits for a later retry.
+      // A repair that ended without sampling (failed, overflowed, abandoned)
+      // settles the visit with no line, so the first screen never waits for
+      // a later retry.
       if (!unreadSnapshot.sampled)
         return unreadSnapshot.sampling
           ? { ready: false, awaitingRepair: true }
@@ -763,6 +793,92 @@ function Timeline({
     messageVisit?.failed === false
       ? newMessageBoundary.messageId
       : undefined;
+  // A visit's first screen is final. The timeline mounts, measures and
+  // positions its rows hidden, and shows them once the screen is complete:
+  // the line is decided and every name on the rows is known. If that takes
+  // longer than FIRST_SCREEN_WAIT_MS it shows what it has, with no line and
+  // fallback names, and the line is decided as none. After that only data
+  // that arrives later changes the screen.
+  const unnamed = useSyncExternalStore(
+    queries.profiles.subscribe,
+    unnamedProfiles(queries.profiles),
+    unnamedProfiles(queries.profiles),
+  );
+  // A settling visit, on a cached channel list, becomes the visit the
+  // verified list decides on the same screen, so that one opening spans both.
+  const settling = !!messageVisit?.settling;
+  const [opening, setOpening] = useState<Opening>(() => ({
+    epoch: {},
+    token: visitToken,
+    settling,
+    shown: !!retainedVisit?.boundary.captured,
+    expired: false,
+  }));
+  let current = opening;
+  if (opening.token !== visitToken || opening.settling !== settling) {
+    current =
+      opening.token === visitToken || opening.settling
+        ? { ...opening, token: visitToken, settling }
+        : {
+            epoch: {},
+            token: visitToken,
+            settling,
+            shown: !!retainedVisit?.boundary.captured,
+            expired: false,
+          };
+    setOpening(current);
+  }
+  const firstScreenShown = current.shown;
+  const { epoch } = current;
+  useEffect(() => {
+    if (firstScreenShown) return;
+    const timer = setTimeout(
+      () =>
+        setOpening((opening) =>
+          opening.epoch === epoch ? { ...opening, expired: true } : opening,
+        ),
+      FIRST_SCREEN_WAIT_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [firstScreenShown, epoch]);
+  const laidOut = useRef<object>(undefined);
+  useLayoutEffect(() => {
+    laidOut.current = epoch;
+  }, [epoch]);
+  let complete = false;
+  if (!firstScreenShown) {
+    const lineDecided =
+      !ownsMessageVisit ||
+      (messageVisit?.active !== true && !settling) ||
+      messageVisit?.failed ||
+      (boundaryMatchesVisit && newMessageBoundary.captured);
+    const namesKnown = window.rows.every((row) =>
+      rowProfileIds(row).every((id) => profiles.has(id) || unnamed.has(id)),
+    );
+    complete = current.expired || (lineDecided && namesKnown);
+    // Complete before its first commit, the screen is laid out as it shows.
+    // Completed later, it waits a frame for the virtualizer to measure the
+    // rows that changed while it was hidden.
+    if (complete && laidOut.current !== epoch)
+      setOpening({ ...current, shown: true });
+  } else if (boundaryMatchesVisit && !newMessageBoundary.captured)
+    // A line the shown screen did not draw never arrives late.
+    setNewMessageBoundary({
+      token: visitToken,
+      session: queries,
+      scope,
+      channelId,
+      captured: true,
+    });
+  useEffect(() => {
+    if (!complete || firstScreenShown) return;
+    const frame = requestAnimationFrame(() =>
+      setOpening((opening) =>
+        opening.epoch === epoch ? { ...opening, shown: true } : opening,
+      ),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [complete, firstScreenShown, epoch]);
   const [expandedActivity, setExpandedActivity] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -1338,17 +1454,11 @@ function Timeline({
     // Reading before the entry boundary settles would erase the evidence it
     // waits for: catch-up reads every loaded row and observe the unread ones,
     // and either advances the read revision that settles it with no line.
-    // Hold reading while the boundary waits for the page's head read or for
-    // the repair; re-enabling schedules dwell at once. The page hold ends
-    // when its head read does, however it ends, and a failed repair marks
-    // freshness stale, which an earlier gate catches, so each hold ends with
-    // its read either way. Arrivals while away wait for their line in the
-    // same way, once entry has settled.
-    enabled:
-      marksRead &&
-      !boundaryCandidate.awaitingPage &&
-      !boundaryCandidate.awaitingRepair &&
-      !(awayPending && !boundaryPending),
+    // The first screen is shown once the boundary has settled, or once its
+    // wait ends and settles it with no line, so reading waits for it;
+    // re-enabling schedules dwell at once. Arrivals while away wait for their
+    // line in the same way.
+    enabled: marksRead && firstScreenShown && !awayPending,
   });
   // Shift keeps the distance from the end, so it holds the reader only while
   // the rows from their first visible item to the end are kept. Relay pages
@@ -2083,6 +2193,7 @@ function Timeline({
       data-activity-history-scope=""
       data-buzz-launch-pending={launchPending ? "settling" : undefined}
       data-jump-visible={showJumpToLatest || undefined}
+      data-first-screen={firstScreenShown ? undefined : "pending"}
       onWheel={(event) => gesture(event.deltaY < 0 && !event.ctrlKey)}
       onTouchStart={(event) => {
         touchY.current = event.touches[0]?.clientY;

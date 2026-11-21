@@ -435,7 +435,10 @@ function boundaryFixture({ reading = false } = {}) {
       for (const listener of [...liveListeners]) listener();
     });
   }
-  const session = { ...owner.session, channels, unread, live };
+  // A completed read found no profiles, so names are known and fall back.
+  const unnamed = new Set([viewer.pubkey, peer.pubkey]);
+  const profiles = { ...owner.session.profiles, unnamed: () => unnamed };
+  const session = { ...owner.session, channels, unread, live, profiles };
   function row(
     event: RelayEvent,
     channelId = "c",
@@ -596,7 +599,9 @@ function boundaryFixture({ reading = false } = {}) {
         await Promise.resolve();
       });
     },
+    /** Dwell time passes, with the frames drawn meanwhile. */
     async dwell() {
+      await frame();
       await act(async () => {
         vi.advanceTimersByTime(300);
       });
@@ -968,11 +973,6 @@ const awaitedPages: {
   catchUp?: true;
 }[] = [
   {
-    name: "a revisit refresh past the head's freshness lease",
-    entered: {},
-    waiting: { refreshing: true },
-  },
-  {
     name: "saved rows whose head read is running",
     entered: { freshness: "cached" },
     waiting: { freshness: "cached", refreshing: true },
@@ -1029,6 +1029,25 @@ async function pageReader({
   await h.dwell();
   return { h, mounted, page, later };
 }
+
+// A verified window followed the live stream since its head read, so the
+// read a revisit past the head's freshness lease starts verifies nothing the
+// line depends on.
+it("places the line at once on verified rows that a lease refresh re-reads", async () => {
+  const { h, mounted, later } = await pageReader({
+    entered: {},
+    waiting: { refreshing: true },
+  });
+  try {
+    expect(precedes(divider(), screen.getByText("First unread arrival"))).toBe(
+      true,
+    );
+    expect(h.catchUp).toHaveBeenCalledWith(later.id, undefined);
+  } finally {
+    mounted.unmount();
+    vi.useRealTimers();
+  }
+});
 
 it.each(awaitedPages)(
   "holds this list's reading while the boundary waits for the page's head read, then reads once it is placed: $name",
@@ -1128,8 +1147,8 @@ it.each([
 
 it("does not carry the page hold into the next channel", async () => {
   const { h, mounted } = await pageReader({
-    entered: {},
-    waiting: { refreshing: true },
+    entered: { freshness: "cached" },
+    waiting: { freshness: "cached", refreshing: true },
   });
   try {
     expect(h.catchUp).not.toHaveBeenCalled();
@@ -3028,8 +3047,12 @@ it("reads through the last message when a Huddle card is newest, with no plugin 
     ...owner.session.unread.sync(),
     capability: "frontier-sync" as const,
   };
+  // A completed read found no profile, so the author's name is known and
+  // falls back.
+  const unnamed = new Set(["a".repeat(64)]);
   const session = {
     ...owner.session,
+    profiles: { ...owner.session.profiles, unnamed: () => unnamed },
     unread: {
       ...owner.session.unread,
       sync: () => sync,
@@ -3231,8 +3254,12 @@ async function pendingReader() {
     ...owner.session.unread.sync(),
     capability: "frontier-sync" as const,
   };
+  // A completed read found no profile, so the author's name is known and
+  // falls back.
+  const unnamed = new Set(["a".repeat(64)]);
   const session = {
     ...owner.session,
+    profiles: { ...owner.session.profiles, unnamed: () => unnamed },
     unread: {
       ...owner.session.unread,
       sync: () => sync,

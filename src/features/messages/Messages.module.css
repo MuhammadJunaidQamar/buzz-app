@@ -4372,3 +4372,8 @@ html[data-keyboard-navigation]
   line-height: var(--text-caption--line-height);
   letter-spacing: var(--text-caption--letter-spacing);
 }
+/* A visit's first screen is laid out hidden until it is complete. Opacity,
+   not visibility, so the history can still take focus as it opens. */
+.feed[data-first-screen="pending"] {
+  opacity: 0;
+}
