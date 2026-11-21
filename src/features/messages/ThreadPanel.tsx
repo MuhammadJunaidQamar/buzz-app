@@ -870,9 +870,14 @@ function ThreadMessages({
   });
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
+  const readerScrollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   useEffect(
     () => () => {
       if (jumpTimer.current !== undefined) clearTimeout(jumpTimer.current);
+      if (readerScrollTimer.current !== undefined)
+        clearTimeout(readerScrollTimer.current);
     },
     [],
   );
@@ -1926,6 +1931,21 @@ function ThreadMessages({
       captureResizePosition();
     }, 1000);
   };
+  // Virtua's pointer-events hold stays in force only while the reader scrolls,
+  // when hit-testing is wasted work; the panel's own corrections must not
+  // swallow a click (Messages.module.css .threadRows).
+  const markReaderScrolling = () => {
+    const rows = threadRows.current;
+    if (!rows) return;
+    if (!rows.hasAttribute("data-reader-scrolling"))
+      rows.setAttribute("data-reader-scrolling", "");
+    if (readerScrollTimer.current !== undefined)
+      clearTimeout(readerScrollTimer.current);
+    readerScrollTimer.current = setTimeout(() => {
+      readerScrollTimer.current = undefined;
+      rows.removeAttribute("data-reader-scrolling");
+    }, 150);
+  };
   const keepReadingPosition = () => {
     if (scroller.current) corrected.delete(scroller.current);
     jumpingToLatest.current = false;
@@ -2470,11 +2490,13 @@ function ThreadMessages({
           loadNewer();
         }}
         onWheel={(event) => {
+          markReaderScrolling();
           keepReadingPosition();
           if (event.deltaY < 0) loadOlder();
           if (event.deltaY > 0) loadNewer();
         }}
         onTouchMove={() => {
+          markReaderScrolling();
           keepReadingPosition();
           loadOlder();
           loadNewer();
@@ -2510,6 +2532,7 @@ function ThreadMessages({
               " ",
             ].includes(event.key)
           ) {
+            markReaderScrolling();
             keepReadingPosition();
             if (
               ["ArrowUp", "PageUp", "Home"].includes(event.key) ||

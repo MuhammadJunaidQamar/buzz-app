@@ -603,7 +603,7 @@ test("keyboard selection steps to the reply beside it when the virtual list left
   }
 });
 
-test("thread rows keep accepting pointer input while the list scrolls", async ({
+test("thread rows ignore pointer input while the reader scrolls but not through the panel's own corrections", async ({
   page,
 }) => {
   const server = await createServer({
@@ -621,23 +621,34 @@ test("thread rows keep accepting pointer input while the list scrolls", async ({
     );
     const history = page.getByRole("region", { name: "Thread messages" });
     await expect.poll(() => threadReplyCount(history)).toBe(10);
+    const sample = () =>
+      history.evaluate(
+        (el) =>
+          new Promise((resolve) => {
+            const list = el.querySelector("[data-thread-rows] > ol");
+            const states = new Set();
+            const end = performance.now() + 600;
+            const watch = () => {
+              states.add(getComputedStyle(list).pointerEvents);
+              if (performance.now() < end) requestAnimationFrame(watch);
+              else resolve([...states]);
+            };
+            watch();
+          }),
+      );
+    const programmatic = sample();
+    await history.evaluate((el) => {
+      el.scrollTop -= 60;
+    });
+    expect(await programmatic).toEqual(["auto"]);
     await history.hover();
-    const seen = history.evaluate(
-      (el) =>
-        new Promise((resolve) => {
-          const list = el.querySelector("[data-thread-rows] > ol");
-          const states = new Set();
-          const end = performance.now() + 600;
-          const sample = () => {
-            states.add(getComputedStyle(list).pointerEvents);
-            if (performance.now() < end) requestAnimationFrame(sample);
-            else resolve([...states]);
-          };
-          sample();
-        }),
-    );
+    const wheeled = sample();
     await page.mouse.wheel(0, -120);
-    expect(await seen).toEqual(["auto"]);
+    expect(await wheeled).toContain("none");
+    await expect(history.locator("[data-thread-rows] > ol")).toHaveCSS(
+      "pointer-events",
+      "auto",
+    );
   } finally {
     await server.close();
   }
