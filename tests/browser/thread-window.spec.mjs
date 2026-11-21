@@ -112,8 +112,10 @@ test("older-page retry repeats the failed continuation at the scrollback cue", a
         page.evaluate(() => window.messagesFixture.report.filters.length),
       )
       .toBe(3);
-    // The full-image root can fill the viewport. Read the reply cue before
-    // releasing the request so recovery is measured from that position.
+    // The full-image root can fill the viewport, leaving no reply mounted at
+    // the top. Scroll to the reply cue before releasing the request so recovery
+    // is measured from that position.
+    await scrollUntilMounted(history, replies.first());
     await replies.first().scrollIntoViewIfNeeded();
     await expect(replies.first()).toBeInViewport();
     await page.evaluate(() => window.messagesFixture.releaseOlderPage());

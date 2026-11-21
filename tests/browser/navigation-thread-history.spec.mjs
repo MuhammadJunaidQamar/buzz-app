@@ -332,6 +332,10 @@ for (const reading of [false, true]) {
       }
       // Expansion changes visibility, not the loaded-history count.
       const expand = region.getByRole("button", { name: /^View 1 reply/ });
+      // Jump to latest finishes its scroll on a one-second timer that only a
+      // reader gesture cancels; without one, it can undo the scroll below.
+      await region.hover();
+      await wheel(page, -100, region);
       await scrollUntilMounted(region, expand);
       await expand.click();
       await expect(
