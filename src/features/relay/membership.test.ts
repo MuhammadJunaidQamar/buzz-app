@@ -721,9 +721,128 @@ it("leaves a failed head's window empty, notices and all", async () => {
     await flush();
     q.ensure("a");
     await flush();
-    take(wire, isWindow).fail(new ReadError("unavailable", "head failed"));
+    take(wire, isWindow).fail(
+      new ReadError("unavailable", "Relay read failed (500)", 500),
+    );
+    await flush();
+    // The head is read again without its notices, and that fails too.
+    const alone = take(wire, isWindow);
+    expect(alone.filters).toHaveLength(1);
+    alone.fail(new ReadError("unavailable", "Relay read failed (500)", 500));
     await flush();
     expect(q.window("a")).toMatchObject({ status: "error", rows: [] });
+  } finally {
+    owner.dispose();
+  }
+});
+
+it("a failed notice filter never fails the head: it is read alone, and its notices apart", async () => {
+  const wire = scriptedTransport(viewer.pubkey, relay.pubkey, {
+    notices: true,
+  });
+  const owner = createRelaySession(wire.transport, {
+    readStateFloor: () => 0,
+    prepared: true,
+  });
+  const q = owner.session.channels;
+  try {
+    q.ensureList();
+    wire
+      .next()
+      .respond([
+        roster(relay, "a", [viewer.pubkey]),
+        metadata(relay, "a", "A"),
+      ]);
+    await flush();
+    q.ensure("a");
+    await flush();
+    // The relay fails the whole query when one of its filters fails.
+    const combined = take(wire, isWindow);
+    expect(combined.filters).toHaveLength(2);
+    combined.fail(new ReadError("unavailable", "Relay read failed (500)", 500));
+    await flush();
+    const alone = take(wire, isWindow);
+    expect(alone.filters).toHaveLength(1);
+    const hello = message(viewer, "a", "Hello", 20);
+    alone.respond([hello, end()]);
+    await flush();
+    expect(q.window("a")).toMatchObject({ status: "ready", error: undefined });
+    expect(q.window("a").rows.map((r) => r.id)).toEqual([hello.id]);
+    // The window reads its newest notices on their own.
+    const joined = addition(pinky.pubkey, 21);
+    take(wire, isNotices).respond([joined]);
+    await flush();
+    expect(q.window("a").rows.map((r) => r.id)).toEqual([hello.id, joined.id]);
+  } finally {
+    owner.dispose();
+  }
+});
+
+it("a head trimmed to its rows' notices reads them again when a later window adopts it", async () => {
+  const wire = scriptedTransport(viewer.pubkey, relay.pubkey, {
+    notices: true,
+  });
+  const owner = createRelaySession(wire.transport, {
+    readStateFloor: () => 0,
+    prepared: true,
+    maxWindows: 1,
+  });
+  const q = owner.session.channels;
+  try {
+    q.ensureList();
+    wire
+      .next()
+      .respond([
+        roster(relay, "a", [viewer.pubkey]),
+        metadata(relay, "a", "A"),
+        roster(relay, "b", [viewer.pubkey]),
+        metadata(relay, "b", "B"),
+      ]);
+    await flush();
+    q.ensure("a");
+    await flush();
+    const hello = message(viewer, "a", "Hello", 1_000);
+    // A full page of notices: 300 among the head's rows, 200 below them.
+    const notices = Array.from({ length: 500 }, (_, index) =>
+      addition(keypair().pubkey, index < 300 ? 1_001 + index : 500 + index),
+    );
+    const head = [
+      hello,
+      bounds(relay, "a", "head", {
+        has_more: true,
+        next_cursor: { created_at: hello.created_at, id: hello.id },
+      }),
+    ];
+    take(wire, isWindow).respond([...head, ...notices]);
+    await flush();
+    expect(q.window("a").rows).toHaveLength(301);
+    // Another channel's window evicts this one; its head stays in memory.
+    q.ensure("b");
+    await flush();
+    take(wire, isWindow).respond([
+      bounds(relay, "b", "head", { has_more: false, next_cursor: null }),
+    ]);
+    await flush();
+    q.ensure("a");
+    await flush();
+    expect(q.window("a").rows).toHaveLength(301);
+    // The kept head holds only the notices among its rows, so where the
+    // descent continues comes from a new read of the newest notices.
+    take(wire, isNotices).respond(notices);
+    await flush();
+    q.loadOlder("a");
+    const first = message(viewer, "a", "First", 400);
+    take(wire, isWindow).respond([
+      first,
+      bounds(relay, "a", `1000:${hello.id}`, {
+        has_more: false,
+        next_cursor: null,
+      }),
+    ]);
+    await flush();
+    take(wire, isNotices).respond([]);
+    await flush();
+    expect(q.window("a").rows).toHaveLength(502);
   } finally {
     owner.dispose();
   }

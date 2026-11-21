@@ -868,7 +868,13 @@ export function createChannelStore(
       notices.every((event, index) => event === head.notices?.[index])
     )
       return;
-    const kept = { ...head, notices };
+    // The head's own notice read placed the descent's cursor below its oldest
+    // notice. Without all of them, a later adoption cannot place it.
+    const { noticesRead, ...rest } = head;
+    const kept =
+      noticesRead && head.notices?.every((event) => notices.includes(event))
+        ? { ...rest, notices, noticesRead }
+        : { ...rest, notices };
     heads.set(state.channelId, kept);
     save(state.channelId, kept);
   }
@@ -1134,9 +1140,28 @@ export function createChannelStore(
       });
     // Head reads belong to session recovery; only manual pagination needs a
     // finite retry owner here.
-    const received = cursor
-      ? await retryRead(read, settings.signal ?? new AbortController().signal)
-      : await read();
+    let received: readonly RelayEvent[];
+    try {
+      received = cursor
+        ? await retryRead(read, settings.signal ?? new AbortController().signal)
+        : await read();
+    } catch (error) {
+      // The relay fails the whole query when one filter fails, and notices
+      // never fail the head. When the relay itself rejected the query (a bad
+      // filter or a failed query: 400 or 500), read the head alone, and the
+      // window reads its notices apart (see `fillNotices`). Anything else (a
+      // denial, an abort, a rate limit, a gateway or network failure) answers
+      // both filters.
+      if (
+        filters.length < 2 ||
+        !(error instanceof ReadError) ||
+        (error.status !== 400 && error.status !== 500)
+      )
+        throw error;
+      relayDebug("head notices failed", channelId.slice(0, 8));
+      filters.pop();
+      received = await read();
+    }
     // Pages never hold notices (see `WINDOW_KINDS`): any are the second filter's.
     const notices =
       filters.length > 1
