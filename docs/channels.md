@@ -1354,6 +1354,18 @@ The port retains the prepared-store implementation and its behavior tests:
   membership evidence and earlier name batches.
 - Conventional top-down virtua timeline, prepend anchoring, near-bottom following,
   and three cached geometries keyed by session, channel, content, profiles, and width.
+- A visit's first screen is final. `ChannelTimeline` mounts, measures and
+  positions the window's rows hidden, and shows them only once the screen is
+  complete: the **New messages** line is decided (see
+  [unread](unread.md)) and every name on the rows is known (a profile, or a
+  completed read that found none). A screen complete at mount shows at once; one
+  completed later waits a frame so the virtualizer measures rows that changed
+  while hidden. After 500 ms the screen shows what it has, with fallback names,
+  and the visit settles with no line, so the line never arrives late. After
+  that, only data that arrived after the open changes the screen: live rows,
+  later names, and the away-and-return line. A settling visit (a cached channel
+  list that verification turns into an active visit) is the same opening. Reading
+  waits for the screen to show.
 
 Connection generations and store epochs reject late results after disconnect,
 replacement, disposal, or access revocation. The data service outlives plugin
@@ -1453,14 +1465,22 @@ guarantee of general profile retry after every cache clear/network failure. See
 
 The live route includes relay-signed kind-40099 `member_joined`, `member_left` and
 `member_removed` summaries. History pages do not: a NIP-CW page counts every row kind
-against its limit, so a burst of joins could fill pages and hold messages back. After
-each page or head read, the window reads the relay's notices apart, newest first in
-pages of 500, down to its oldest loaded message, so the messages show first and the
-activity between them follows. A head read re-reads the newest notices; when they do
-not meet the ones held, the descent starts over. A window holds at most 2,000 notices
-read this way, outside its row budget; older pages past that show without activity.
-A failed notice read leaves activity out until the next page or head read and never
-errors the window. Saved heads carry no notices. Only recognized,
+against its limit, so a burst of joins could fill pages and hold messages back. A
+head read asks for the channel's newest 500 notices in the same request, so the head
+shows with them. The relay fails a whole request when one of its filters fails, so
+when the relay itself rejects that request (400 or 500), the head is read again on
+its own and the window reads its notices apart; a notice failure never fails the
+head. A denial, cancellation, rate limit, gateway or network failure fails both. Below the head, after each older page, the window reads notices
+apart, newest first in pages of 500, down to its oldest loaded message, so the
+messages show first and the activity between them follows. When a head's newest
+notices do not meet the ones held, the descent starts over. A window holds at most
+2,000 notices read this way, outside its row budget; older pages past that show
+without activity. A failed notice read leaves activity out until the next page or
+head read and never errors the window. Heads, retained and saved, carry the newest
+notices among their rows (relay-signed ones only, reverified on restore) with their
+subjects' names. A head trimmed to its rows' range keeps no claim to have read the
+newest page, so adopting it reads the newest notices again to place the descent.
+Only recognized,
 channel-scoped payloads from the connected relay become activity rows; malformed,
 unknown and other authors' summaries are not rendered as JSON. These events do not
 grant/revoke access: the existing signed roster remains authoritative.
