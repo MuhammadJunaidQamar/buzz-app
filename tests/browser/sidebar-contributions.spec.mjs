@@ -515,34 +515,53 @@ appTest.describe("Solo header accessories", () => {
     });
   };
 
-  appTest(
-    "keeps Team channel Actions and New task separately clickable",
-    async ({ page, app }) => {
-      await admitNewTask(page);
-      await page.goto(
-        `${app.origin}/?solo-region-fixture&team-row-channel-group`,
-      );
-      await openPage(page, "Messages");
-      const group = page.locator('[data-team-row-channel-group="alpha"]');
-      const actions = group.getByRole("button", { name: "Actions for Alpha" });
-      const newTask = group.getByRole("button", { name: "New task in Alpha" });
-      const draft = group.getByRole("textbox", { name: "New task title" });
-      await group.getByRole("button", { name: "Alpha", exact: true }).hover();
-      await expect(actions).toHaveCSS("opacity", "1");
-      await expect(newTask).toHaveCSS("opacity", "1");
-      await actions.click();
-      const menu = page.getByRole("menu", { name: "Actions for Alpha" });
-      await expect(menu).toBeVisible();
-      await expect(draft).toHaveCount(0);
-      await menu.getByRole("menuitem").first().focus();
-      await page.keyboard.press("Escape");
-      await expect(menu).toBeHidden();
-      await newTask.hover();
-      await expect(actions).toHaveCSS("opacity", "1");
-      await newTask.click();
-      await expect(draft).toBeVisible();
-    },
-  );
+  appTest.describe("Team channel actions", () => {
+    const title = "alpha-channel-planning-and-weekly-status-updates";
+    appTest.use({
+      channelNames: { alpha: title, beta: "Beta", gamma: "Gamma" },
+    });
+
+    appTest(
+      "keeps both actions clickable and clear of the title",
+      async ({ page, app }) => {
+        await admitNewTask(page);
+        await page.goto(
+          `${app.origin}/?solo-region-fixture&team-row-channel-group`,
+        );
+        await openPage(page, "Messages");
+        const group = page.locator('[data-team-row-channel-group="alpha"]');
+        const actions = group.getByRole("button", {
+          name: `Actions for ${title}`,
+        });
+        const newTask = group.getByRole("button", {
+          name: `New task in ${title}`,
+        });
+        const draft = group.getByRole("textbox", { name: "New task title" });
+        const channel = group.getByRole("button", { name: title, exact: true });
+        const label = channel.locator(".navigation-item-label");
+        await channel.hover();
+        await expect(actions).toHaveCSS("opacity", "1");
+        await expect(newTask).toHaveCSS("opacity", "1");
+        const mask = await label.evaluate(
+          (element) => getComputedStyle(element).maskImage,
+        );
+        expect(mask).not.toBe("none");
+        await newTask.hover();
+        await expect(label).toHaveCSS("mask-image", mask);
+        await actions.click();
+        const menu = page.getByRole("menu", { name: `Actions for ${title}` });
+        await expect(menu).toBeVisible();
+        await expect(draft).toHaveCount(0);
+        await menu.getByRole("menuitem").first().focus();
+        await page.keyboard.press("Escape");
+        await expect(menu).toBeHidden();
+        await newTask.hover();
+        await expect(actions).toHaveCSS("opacity", "1");
+        await newTask.click();
+        await expect(draft).toBeVisible();
+      },
+    );
+  });
 
   // Real hit testing catches an accessory covered by the workspace selection
   // target. Text truncation, the trailing swap and focus use browser layout.
