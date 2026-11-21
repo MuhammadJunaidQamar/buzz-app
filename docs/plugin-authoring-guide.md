@@ -210,7 +210,9 @@ rendering it when `onClose` runs (Escape, the backdrop or the close button). It
 takes an https `src` and an optional `name` for its header. Relay-hosted media
 loads through the session's signed read, as message media does, and other
 https images load directly. Any other source, or relay media the session cannot
-read, renders nothing and calls `onClose`. The type-only author package exports
+read (including while the community connects or after it changes), renders
+nothing and calls `onClose`. An image that fails to load shows an unavailable
+status with the close button kept. The type-only author package exports
 `ImageViewerProps`. Older hosts lack this entry; check its presence and keep a
 link to the image when supporting those hosts.
 
