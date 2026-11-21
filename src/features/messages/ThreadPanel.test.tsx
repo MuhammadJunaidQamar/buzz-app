@@ -14,6 +14,7 @@ import { renderToString } from "react-dom/server";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { ThreadPanel, type ThreadPanelProps } from "./ThreadPanel";
 import { selectNewestMessage } from "./message-selection";
+import { viewport } from "./virtua.testing";
 import type { MessageRowProps } from "./MessageRow";
 import type { MessageComposerProps } from "./MessageComposer";
 import { createAgentLibrary } from "../agents/library";
@@ -131,6 +132,7 @@ vi.mock("./MessageComposer", () => ({
 }));
 afterEach(() => {
   cleanup();
+  viewport.holds = () => true;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
@@ -398,6 +400,40 @@ it("registers its messages for keyboard selection and leaves an Escape the selec
   fireEvent.keyDown(selected as Element, { key: "Escape" });
   expect(h.close).toHaveBeenCalledOnce();
   h.unmount();
+});
+function unmountedReplies(held: (index: number) => boolean) {
+  const h = messagesHarness();
+  h.snapshot.replies = ["c", "d", "e", "f", "g"].map((id, index) => ({
+    ...threadReply(id, row.id),
+    createdAt: 2 + index,
+  }));
+  viewport.holds = held;
+  h.render();
+  const at = (id: string) =>
+    h.element.querySelector<HTMLElement>(
+      `[data-message-id="${id.repeat(64)}"]`,
+    );
+  return { h, at };
+}
+it("keyboard selection steps to the loaded reply beside it, mounting it, not past a gap in the mounted replies", () => {
+  const { at } = unmountedReplies((index) => index >= 3);
+  expect(at("e")).toBeNull();
+  const selected = at("f");
+  if (!selected) throw new Error("Missing mounted reply");
+  selected.tabIndex = -1;
+  selected.focus();
+  fireEvent.keyDown(selected, { key: "ArrowUp" });
+  expect(at("e")).toHaveFocus();
+  fireEvent.keyDown(at("e") as Element, { key: "ArrowDown" });
+  expect(at("f")).toHaveFocus();
+});
+it("selects the newest reply by mounting it when scrolling has unmounted it", () => {
+  const { h, at } = unmountedReplies((index) => index < 2);
+  expect(at("g")).toBeNull();
+  act(() => {
+    expect(selectNewestMessage(h.element)).toBe(true);
+  });
+  expect(at("g")).toHaveFocus();
 });
 it("allocation failure exposes an effective retry rather than leaving a spinner", () => {
   const h = messagesHarness();
@@ -3092,6 +3128,19 @@ it.each([
   expect(h.element).not.toHaveAttribute("data-positioning");
 });
 
+it("Back restores a gone reply's parent that sits outside the mounted replies", () => {
+  const { places, visit } = visitPlaces();
+  const parent = threadReply("d", row.id);
+  places.set("thread-visit:thread", {
+    anchor: { id: "e".repeat(64), top: -100, ancestors: [parent.id] },
+  });
+  viewport.holds = () => false;
+  const h = messagesHarness(visit("thread-visit", true));
+  h.snapshot.replies = [parent];
+  h.render();
+  expect(h.element.scrollTop).toBe(100);
+});
+
 it("Back to a place inside a folded relayed group reopens that group at it", () => {
   const { places, visit } = visitPlaces();
   const relayed = ["d", "e", "f"].map((id, index) => ({
@@ -3624,6 +3673,29 @@ it("releases bottom following after a jump that included child-only resizing", (
   h.snapshot.replies = [{ ...row, id: "new", content: "new" }];
   h.render();
   expect(h.element.scrollTop).toBe(2000);
+});
+
+it("follows the latest replies again when End lands where an earlier correction left the reader", () => {
+  const h = messagesHarness();
+  const replies = ["c", "d", "e"].map((id) => threadReply(id, row.id));
+  layOutRows([row.id, ...replies.map((reply) => reply.id)]);
+  h.snapshot.replies = replies;
+  h.render();
+  h.scroll(2000);
+  // The content shrinks under the reader: the browser clamps the offset and the
+  // panel's correction records where it left it.
+  h.resize(2400);
+  h.element.scrollTop = 2000;
+  h.deliverResize();
+  expect(h.element.scrollTop).toBe(1800);
+  h.scroll(500);
+  fireEvent.keyDown(h.element, { key: "End" });
+  h.scroll(1800);
+  expect(h.element).not.toHaveAttribute("data-jump-visible");
+  h.resize(2700);
+  h.snapshot.replies = [...replies, threadReply("f", row.id)];
+  h.render();
+  expect(h.element.scrollTop).toBe(2100);
 });
 
 it("keeps the item holding an activity group mounted for an exact link to its later step", async () => {

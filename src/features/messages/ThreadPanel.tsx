@@ -40,6 +40,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { flushSync } from "react-dom";
 import { Virtualizer } from "virtua";
 import { stageEdges, ThreadItem } from "./thread-items";
 import { XIcon } from "../../shared/design-system/icons/index";
@@ -1316,6 +1317,7 @@ function ThreadMessages({
   // mounted elsewhere: the focused one, and those a row asks for (an open menu,
   // report or edit).
   const [focusedId, setFocusedId] = useState<string>();
+  const [exposedId, setExposedId] = useState<string>();
   const [pinnedIds, setPinnedIds] = useState<ReadonlyMap<string, number>>(
     () => new Map(),
   );
@@ -1924,6 +1926,7 @@ function ThreadMessages({
     }, 1000);
   };
   const keepReadingPosition = () => {
+    if (scroller.current) corrected.delete(scroller.current);
     jumpingToLatest.current = false;
     remounted.current = undefined;
     if (jumpTimer.current !== undefined) {
@@ -2247,11 +2250,15 @@ function ThreadMessages({
   // Kept mounted with their top-level reply: the exact target, an own send
   // awaiting its reveal, the focused row, the unread line, rows that asked,
   // and the place a Back/Forward return restores.
-  const returnAnchor =
+  const place =
     returning && restoredVisit.current !== navigation?.signal
       ? (navigation?.position(THREAD_PLACE) as ThreadPlace | undefined)?.anchor
-          ?.id
       : undefined;
+  const returnAnchor =
+    place &&
+    [place.id, ...place.ancestors].find((id) =>
+      snapshot.replies.some((reply) => reply.id === id),
+    );
   const itemOf = (id: string) => {
     const top = tree.ancestors(id).at(-1) ?? id;
     return itemOwners.get(top) ?? top;
@@ -2261,6 +2268,7 @@ function ThreadMessages({
       messageId,
       sent,
       focusedId,
+      exposedId,
       returnAnchor,
       lineRow,
       ...pinnedIds.keys(),
@@ -2269,6 +2277,24 @@ function ThreadMessages({
   const keptIndices = listed.flatMap((item, index) =>
     keptIds.has(String(item.key)) ? [index] : [],
   );
+  // Keyboard selection reaches a loaded reply by mounting it first.
+  const expose = (id: string, step: -1 | 1 | 0 = 0) => {
+    const atRoot = id === snapshot.root?.id;
+    const index = atRoot
+      ? -1
+      : listed.findIndex((item) => String(item.key) === itemOf(id));
+    const target = index + step;
+    const item = listed[target];
+    if (
+      (index < 0 && !atRoot) ||
+      !item ||
+      scroller.current?.querySelector(
+        `[data-thread-rows] > ol > li[aria-posinset="${target + 1}"]`,
+      )
+    )
+      return;
+    flushSync(() => setExposedId(String(item.key)));
+  };
   // Every commit records what Virtua was given.
   useLayoutEffect(() => {
     committed.current = {
@@ -2461,10 +2487,13 @@ function ThreadMessages({
             ?.getAttribute("aria-posinset");
           const item = position ? listed[Number(position) - 1] : undefined;
           setFocusedId(item ? String(item.key) : undefined);
+          setExposedId(undefined);
         }}
         onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget))
+          if (!event.currentTarget.contains(event.relatedTarget)) {
             setFocusedId(undefined);
+            setExposedId(undefined);
+          }
         }}
         onKeyDown={(event) => {
           moveMessageSelection(event);
@@ -2496,7 +2525,7 @@ function ThreadMessages({
           newMessageCount={newMessageCount}
           onClick={jumpToLatest}
         />
-        <MessageContextMenus>
+        <MessageContextMenus keepMounted={keepRowMounted}>
           <div
             ref={threadRows}
             data-thread-rows=""
@@ -2661,6 +2690,7 @@ function ThreadMessages({
         rows={rows}
         session={session}
         conversationId={rootId}
+        expose={expose}
       />
       {preview && (
         <ChannelJoinNotice

@@ -43,14 +43,13 @@
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const workloadNow = async () => (await fetch("/__perf/workload")).json();
 
-  // The panel mounts only the top-level replies near its viewport; each
-  // item's aria-setsize counts every one it holds.
-  const heldTopLevel = (element) =>
-    Number(
-      element
-        .querySelector("[data-thread-rows] > ol > li")
-        ?.getAttribute("aria-setsize") ?? 0,
-    );
+  // The virtualized panel mounts only the top-level replies near its viewport;
+  // each item's aria-setsize counts every one it holds. An arm without the
+  // attribute renders them all.
+  const heldTopLevel = (element) => {
+    const items = element.querySelectorAll("[data-thread-rows] > ol > li");
+    return Number(items[0]?.getAttribute("aria-setsize") ?? items.length);
+  };
   function geometry(element) {
     if (!element) return null;
     const box = element.getBoundingClientRect();

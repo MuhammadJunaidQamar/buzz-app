@@ -522,3 +522,81 @@ for (const reading of [false, true, "exact"])
       await server.close();
     }
   });
+
+test("keyboard selection steps to the reply beside it when the virtual list left that one unmounted", async ({
+  page,
+}) => {
+  const server = await createServer({
+    root: fileURLToPath(new URL("../../", import.meta.url)),
+    configFile: false,
+    envFile: false,
+    plugins: [react()],
+    logLevel: "error",
+    server: { host: "127.0.0.1", port: 0, strictPort: false },
+  });
+  await server.listen();
+  try {
+    await page.goto(
+      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/messages.html?threadWindow=1`,
+    );
+    const history = page.getByRole("region", { name: "Thread messages" });
+    await expect.poll(() => threadReplyCount(history)).toBe(10);
+    for (const count of [60, 110, 160, 210]) {
+      await history.evaluate((el) => {
+        el.scrollTop = 0;
+        el.dispatchEvent(new Event("scroll"));
+      });
+      await history.hover();
+      await page.mouse.wheel(0, -300);
+      await expect.poll(() => threadReplyCount(history)).toBe(count);
+    }
+    await history.evaluate((el) => {
+      el.scrollTop = el.scrollHeight / 2;
+    });
+    // The first reply the list holds, in one step: with the root above it, the
+    // replies before it are loaded but not mounted.
+    await expect
+      .poll(() =>
+        history.evaluate((el) => {
+          const [first] = [
+            ...el.querySelectorAll("[data-thread-rows] > ol > li"),
+          ].sort(
+            (a, b) =>
+              Number(a.getAttribute("aria-posinset")) -
+              Number(b.getAttribute("aria-posinset")),
+          );
+          return Number(first?.getAttribute("aria-posinset"));
+        }),
+      )
+      .toBeGreaterThan(2);
+    const at = await history.evaluate((el) => {
+      const [first] = [
+        ...el.querySelectorAll("[data-thread-rows] > ol > li"),
+      ].sort(
+        (a, b) =>
+          Number(a.getAttribute("aria-posinset")) -
+          Number(b.getAttribute("aria-posinset")),
+      );
+      const box = first?.querySelector("[data-message-id] > [data-layout]");
+      if (!box) throw new Error("No reply is mounted");
+      box.tabIndex = -1;
+      box.focus({ preventScroll: true });
+      return Number(first.getAttribute("aria-posinset"));
+    });
+    expect(at).toBeGreaterThan(2);
+    await page.keyboard.press("ArrowUp");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Number(
+            document.activeElement
+              ?.closest("[data-thread-rows] > ol > li")
+              ?.getAttribute("aria-posinset"),
+          ),
+        ),
+      )
+      .toBe(at - 1);
+  } finally {
+    await server.close();
+  }
+});
