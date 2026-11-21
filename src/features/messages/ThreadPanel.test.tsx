@@ -191,6 +191,7 @@ function messagesHarness(
     loadMore: ReturnType<typeof vi.fn<() => Promise<void>>>;
     loadBack: ReturnType<typeof vi.fn<() => Promise<void>>>;
     latest: ReturnType<typeof vi.fn<() => Promise<void>>>;
+    pin: ReturnType<typeof vi.fn<ThreadView["pin"]>>;
     retarget: ReturnType<typeof vi.fn<ThreadView["retarget"]>>;
     dispose: ReturnType<typeof vi.fn>;
   })[] = [];
@@ -208,6 +209,7 @@ function messagesHarness(
       loadMore: vi.fn(async () => {}),
       loadBack: vi.fn(async () => {}),
       latest: vi.fn(async () => {}),
+      pin: vi.fn<ThreadView["pin"]>(),
       retarget: vi.fn<ThreadView["retarget"]>(async () => "selected"),
       dispose: vi.fn(),
       listeners,
@@ -3584,6 +3586,23 @@ it("reselecting an invocation thread returns its reader to the latest message", 
   h.rerenderProps();
 
   expect(h.element.scrollTop).toBe(3400);
+});
+
+it("reselecting an invocation thread whose window moved off the newest page reads that page", () => {
+  const h = messagesHarness();
+  const props: ThreadPanelProps = h.props;
+  props.subthreadId = row.id;
+  h.snapshot.direction = "older";
+  h.snapshot.canLoadMore = true;
+  h.snapshot.canLoadBack = true;
+  h.render();
+  h.scroll(2000);
+  expect(h.view.latest).not.toHaveBeenCalled();
+
+  props.latestRequest = new AbortController().signal;
+  h.rerenderProps();
+
+  expect(h.view.latest).toHaveBeenCalledOnce();
 });
 
 it("releases bottom following after a jump that included child-only resizing", () => {

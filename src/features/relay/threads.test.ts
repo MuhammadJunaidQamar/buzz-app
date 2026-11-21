@@ -1117,6 +1117,24 @@ it("holds one oversized page rather than wiping the thread", async () => {
   expect(h.view.snapshot().replies).toHaveLength(1);
 });
 
+it("counts the window as full once the byte budget evicts a page, so automatic traversal stops", async () => {
+  const h = seeded();
+  const loading = h.view.refresh();
+  h.next().respond([root, reply("x".repeat(1 << 20), 10)]);
+  await loading;
+  for (let page = 2; page <= 4; page++) {
+    const more = h.view.loadMore();
+    h.next().respond([root, reply("x".repeat(1 << 20), page * 10)]);
+    await more;
+    expect(h.view.snapshot().limited).toBe(page === 4);
+  }
+  expect(h.view.snapshot()).toMatchObject({
+    canLoadBack: true,
+    canLoadMore: true,
+    limited: true,
+  });
+});
+
 // Sign this immutable evidence once at module setup, outside each test's clock.
 const summaryBudgetFixture = (() => {
   const deleted = reply("deleted", 2);
@@ -1184,13 +1202,17 @@ it.each(["live", "read"])(
       expect(thread.events()).toContain(tombstone);
       expect(thread.events()).toHaveLength(1003);
 
-      // Past the budget a lone page is held rather than lost, tombstone included.
+      // Past the budget live growth divides a page that was read and holds
+      // events no page owns; the tombstone stays either way.
       thread.receive(overflow);
       expect(thread.view.snapshot()).toMatchObject({
         error: undefined,
         root: { id: root.id },
+        canLoadBack: source === "read",
       });
-      expect(thread.view.snapshot().replies).toHaveLength(999 + 998);
+      expect(thread.view.snapshot().replies).toHaveLength(
+        source === "read" ? 999 : 999 + 998,
+      );
       expect(thread.events()).toContain(tombstone);
     } finally {
       thread.view.dispose();

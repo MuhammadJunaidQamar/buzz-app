@@ -1510,8 +1510,11 @@ evicts pages at its far end, and scrolling back toward them reads them again; th
 row being read keeps its place. Reaching a size bound evicts far pages and never
 clears the thread. While newer pages are evicted the panel does not follow new
 replies: Jump to latest, and sending a reply to the root, reopen it at the newest
-page. The root, an exact target and the parents of loaded replies stay loaded, and
-a deletion the panel has seen still applies when its reply's page is read again. A window is not a
+page. If more replies arrived than a read back can cover, the window stays where it
+is and Jump to latest remains. The root, an exact target, the reply being answered
+and the parents of loaded replies stay loaded, and a deletion the panel has seen,
+including one for a reply already evicted, still applies when its page is read
+again. A window is not a
 completeness claim. An older relay returning verified replies without thread
 bounds on the initial probe triggers a clean legacy restart: oldest-first
 traversal that walks automatically until its window fills, whose bottom may not

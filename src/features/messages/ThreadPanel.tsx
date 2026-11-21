@@ -750,6 +750,10 @@ function ThreadMessages({
   }, [messageId, navigation?.signal, revealRequest, snapshot.replies, tree]);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [replyParent, setReplyParent] = useState<string>();
+  useEffect(() => {
+    view.pin(replyParent);
+    return () => view.pin(undefined);
+  }, [view, replyParent]);
   const resolveName = useChannelIdentityNames(session, channelId);
   const senderName = (row: ChannelMessage) => {
     const id = row.workflowOwnerId ?? row.authorId;
@@ -1523,6 +1527,7 @@ function ThreadMessages({
     // When neither is loaded the visit opens again as it first did.
     if (openLatest) {
       positionedLatestRequest.current = latestRequest;
+      if (detached) void view.latest();
       targetAnchor.current = undefined;
       olderAnchor.current = undefined;
       remounted.current = undefined;

@@ -94,6 +94,7 @@ function fixture({
       loadMore: async () => {},
       loadBack: async () => {},
       latest: async () => {},
+      pin: () => {},
       retarget: async () => "selected",
       dispose: () => {
         entry.disposed = true;
