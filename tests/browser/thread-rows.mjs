@@ -1,5 +1,5 @@
 import { expect } from "./playwright-test.mjs";
-import { frames } from "./timeline.mjs";
+import { frames, settle } from "./timeline.mjs";
 
 // A thread's virtual list mounts only the top-level replies near its viewport.
 // These count what it holds, mounted or not: the rows rendered, plus one for
@@ -50,3 +50,20 @@ export async function scrollUntilMounted(history, locator) {
     if (!moved) return;
   }
 }
+
+/** Wait until the thread's geometry has stopped moving and Virtua accepts
+ * input again. Virtua ignores pointer events while it scrolls, and a click
+ * whose press and release straddle that hold never reaches its button. */
+export async function threadIdle(history) {
+  await settle(history.page(), history);
+  await expect(history.locator("[data-thread-rows] > ol")).toHaveCSS(
+    "pointer-events",
+    "auto",
+  );
+}
+
+/** Scroll a reply into view, retrying while Virtua unmounts and remounts it. */
+export const revealRow = (locator) =>
+  expect(async () => {
+    await locator.scrollIntoViewIfNeeded({ timeout: 2000 });
+  }).toPass({ timeout: 15000 });

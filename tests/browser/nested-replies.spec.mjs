@@ -2,7 +2,7 @@ import { hoverMessage } from "./message-actions.mjs";
 import { test, expect } from "./fixture.mjs";
 import { frames, open } from "./timeline.mjs";
 import { settlePanelMotion } from "./navigation.mjs";
-import { scrollUntilMounted } from "./thread-rows.mjs";
+import { revealRow, scrollUntilMounted, threadIdle } from "./thread-rows.mjs";
 import { generateSecretKey, getPublicKey } from "nostr-tools";
 import { animationsSettled } from "./animations.mjs";
 import { chooseDefaultSkinTone } from "./skin-tone.mjs";
@@ -503,10 +503,16 @@ test("branch hooks land on each reply's avatar across sides and row shapes", asy
     ownAgentsStart,
     emoji,
   ]) {
+    await expect(row(branch)).toBeAttached();
     const summary = row(branch)
       .locator("xpath=ancestor::*[@data-depth][1]")
       .locator(":scope > div [data-thread-summary]");
-    if (await summary.count()) await summary.click();
+    if (await summary.count())
+      await expect(async () => {
+        await threadIdle(panel);
+        if (await summary.count()) await summary.click({ timeout: 2000 });
+        await expect(summary).toHaveCount(0, { timeout: 1000 });
+      }).toPass({ timeout: 15000 });
   }
   await expect(row(startReply)).toBeVisible();
   for (const event of [agentPeerReply, ownAgentsLeft, ownAgents]) {
@@ -519,10 +525,10 @@ test("branch hooks land on each reply's avatar across sides and row shapes", asy
 
   // Peer- and viewer-started branches hook on their own side; a reply on the
   // other side gets a straight line past it.
-  await row(peerReply).scrollIntoViewIfNeeded();
+  await revealRow(row(peerReply));
   expectHookOnAvatar(await hookFor(row(peerReply)), "left");
   expectStraightLine(await hookFor(row(peerOwn)));
-  await row(viewerReply).scrollIntoViewIfNeeded();
+  await revealRow(row(viewerReply));
   expectStraightLine(await hookFor(row(viewerPeer)));
   expectHookOnAvatar(await hookFor(row(viewerReply)), "right");
 
@@ -534,7 +540,7 @@ test("branch hooks land on each reply's avatar across sides and row shapes", asy
     [ownAgents, expectStraightLine],
   ]) {
     const reply = row(event);
-    await reply.scrollIntoViewIfNeeded();
+    await revealRow(reply);
     check(await hookFor(reply));
     const toggle = reply.getByRole("button", { name: /coordination note/ });
     await toggle.click();
@@ -547,12 +553,12 @@ test("branch hooks land on each reply's avatar across sides and row shapes", asy
     check(await hookFor(reply));
   }
   // An own agents line starting a branch keeps the spine and hooks on the left.
-  await row(startReply).scrollIntoViewIfNeeded();
+  await revealRow(row(startReply));
   expectHookOnAvatar(await hookFor(row(startReply)), "left");
 
   // Reactions under an emoji-only bubble do not move the hook off the avatar.
   const reacted = row(emojiReply);
-  await reacted.scrollIntoViewIfNeeded();
+  await revealRow(reacted);
   await hoverMessage(reacted);
   await reacted
     .getByRole("button", { name: "Add reaction", exact: true })
@@ -588,7 +594,7 @@ test("branch hooks land on each reply's avatar across sides and row shapes", asy
   const disclosure = row(agentPeerReply).getByRole("button", {
     name: /coordination note/,
   });
-  await row(agentPeerReply).scrollIntoViewIfNeeded();
+  await revealRow(row(agentPeerReply));
   await disclosure.click();
   await expect(disclosure).toHaveAttribute("aria-expanded", "true");
   await animationsSettled(row(agentPeerReply), { subtree: true });
@@ -621,7 +627,7 @@ test("branch hooks land on each reply's avatar across sides and row shapes", asy
     });
     await expect(activity).toBeVisible();
     await animationsSettled(activity);
-    await row(reply).scrollIntoViewIfNeeded();
+    await revealRow(row(reply));
     expectHookOnAvatar(await hookFor(row(reply)), side);
   }
 });

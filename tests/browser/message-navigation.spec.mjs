@@ -1,5 +1,5 @@
 import { hoverMessage } from "./message-actions.mjs";
-import { threadMessageCount } from "./thread-rows.mjs";
+import { threadIdle, threadMessageCount } from "./thread-rows.mjs";
 import { pluginAction } from "./plugin-settings.mjs";
 import { openChannelDetails } from "./channel-details.mjs";
 import { test, expect } from "./fixture.mjs";
@@ -1076,6 +1076,11 @@ for (const movedFocus of [false, true])
         true,
       );
       await expect(row.locator('[data-revealed="true"]')).toHaveCount(1);
+      // Playwright scrolls a clipped button into view as it clicks; Virtua
+      // ignores pointer events from that scroll until it settles, which can
+      // land between the press and the release and drop the click.
+      await expand.scrollIntoViewIfNeeded();
+      await threadIdle(region);
       await expand.click();
       await expect(
         region.getByText("First live child", { exact: true }),
