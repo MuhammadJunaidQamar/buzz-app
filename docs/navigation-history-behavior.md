@@ -3,7 +3,8 @@
 Dialogs and content tabs follow the [navigation history and dismissal contract](navigation-history.md).
 The integrated families are Members, Settings sections, provider controls opened
 within Settings or through Agents-page links, agent config version inspectors,
-the community join dialog, and thread, Profile and GitHub tabs.
+the community join dialog, inline threads and details readers, and thread,
+Profile and GitHub tabs.
 
 Plugin account-action dialogs in the profile menu are a documented exception.
 They live in the profile menu's own state and create no visit: Back/Forward
@@ -62,6 +63,32 @@ retire that visit, so the next Back leaves the channel and
 Forward keeps Members closed. A link handoff replaces the Members visit with
 its destination when the channel opener is known; cold handoffs retain a channel
 visit beneath the new destination.
+
+An inline thread is a dialog on its conversation's visit: `inline` names its
+root in the conversation address, so a conversation has at most one, and a new
+one replaces it. The **Open threads in** setting (Inline) only decides that
+opening a thread from the timeline writes `inline` rather than opening a tab;
+after that the address alone says what is open. Back closes it and stays in
+the channel; Forward restores it. ✕, Escape and the scrim retire every visit
+naming it, with the details read over it. Move to side panel is a handoff: it
+retires those visits and replaces the current one with the thread's tab, so
+Back never shows the thread inline beside its tab. A thread that has a tab
+opens there instead, and an address that names a thread with a tab shows only
+the tab. Links, Solo threads and read-only channels open tabs as before.
+Leaving the channel leaves the dialog in its visit, which Back restores.
+
+A details reader is a dialog on the view it was opened in, addressed as
+`details` (`{ messageId, rootId?, channelId? }`, the shape of `detail`): with no
+`rootId`, the conversation; with the inline thread's root, a nested layer over
+it; otherwise the thread tab with that root, in `channelId` when that tab
+belongs to another channel. Each address names at most one. Over an inline
+thread, Back closes the details first and then the thread, Forward restores
+them in turn, and closing the thread retires both, as Settings' nested provider
+visits do. ✕, Escape, the scrim and a send from that view's composer retire its
+visits. Reload restores both from the address; the reader appears once its
+message's row is loaded, and a hidden tab's reader waits for the tab. Pages
+without a conversation address (Inbox, Sessions, saved drafts) open details as
+a local dialog with no visit.
 
 Settings Close retires its known section visits for the same account/community
 scope and returns to the covered workspace. A visit that names no community, as

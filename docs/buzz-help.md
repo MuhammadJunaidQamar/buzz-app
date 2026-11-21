@@ -1283,6 +1283,22 @@ Quitting Buzz also turns it off.
   that conversation when you go to another conversation or page and come back,
   until you close it. Reloading Buzz does not restore it. The Terminal drawer
   closes when you leave the conversation.
+- **Inline threads**: **Settings → Appearance → Open threads in → Inline**
+  opens a thread you choose from the timeline over the conversation's message
+  box, with the thread's own reply box in its place. A conversation has one at
+  a time; opening another replaces it. **Move to side panel** moves it, and any
+  reply you were writing, to a thread tab. A thread that already has a tab
+  opens there instead. Links to threads, Solo threads and threads in read-only
+  channels still open as tabs. Back closes the thread and Forward opens it
+  again; ✕ or Escape closes it for good. Leaving the channel leaves it behind,
+  and Back brings it back. Reloading Buzz restores it.
+- **Details messages**: a long message an agent sends for people shows its
+  first paragraph, its brief, in the conversation. **Show more** reads all of
+  it over the message box of the view it is in: the conversation, an inline
+  thread or a thread tab, or as a dialog where that view has no message box.
+  Back closes it first (over an inline thread, before the thread), ✕, Escape
+  or sending a message from that box closes it for good, and reloading Buzz
+  restores it while its message is loaded.
 - **Renamed thread tabs**: a name you or an agent give a thread tab is saved on
   this device for the account and community until the tab is closed. The
   thread's tab shows it again when it reopens after switching channels,

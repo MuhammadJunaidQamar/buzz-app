@@ -26,6 +26,7 @@ import {
 } from "../messages/MessageManagement";
 import { MediaReviewViewer } from "../messages/MediaReviewViewer";
 import { ThreadPanel, type ThreadPanelProps } from "../messages/ThreadPanel";
+import { ComposerScopeProvider } from "../messages/composer-overlay";
 import { useListedChannel } from "../relay/listed-channel";
 import { ownSolo } from "../solo/labels";
 import { useSoloHasPeople } from "../solo/people";
@@ -172,6 +173,7 @@ export function ConversationChannel(props: ChannelProps) {
       channel={channel}
       channelName={channelName}
       interactions={interactions}
+      shown={active !== false}
     >
       {children}
       {review && <ConversationMediaReview {...review} />}
@@ -217,9 +219,12 @@ function Provider({
   channel,
   channelName,
   interactions: { onOpenLink, canOpenLink, onOpenMediaReview },
+  shown,
 }: Pick<ChannelProps, "session" | "scope" | "extensions" | "channel"> & {
   channelName: string;
   interactions: ConversationInteractions;
+  /** Whether the conversation is on screen, for the dialogs its rows open. */
+  shown: boolean;
   children: ReactNode;
 }) {
   const id = channel?.id;
@@ -256,7 +261,12 @@ function Provider({
   );
   return (
     <Context.Provider value={value}>
-      <ActivityIndicatorPresentation>{children}</ActivityIndicatorPresentation>
+      {/* The conversation's own view; a thread view starts its own. */}
+      <ComposerScopeProvider shown={shown}>
+        <ActivityIndicatorPresentation>
+          {children}
+        </ActivityIndicatorPresentation>
+      </ComposerScopeProvider>
     </Context.Provider>
   );
 }
