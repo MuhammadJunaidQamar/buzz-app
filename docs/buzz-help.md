@@ -594,7 +594,8 @@ Quitting Buzz also turns it off.
 - **Team** contains community channels and their threads. Choose **Reply** on a
   message to open or continue its thread. On a reply copied to the channel with
   **Send to channel**, Reply continues the thread it came from, unless the copy
-  already has replies of its own. Use the **@** picker
+  already has replies or a draft reply of its own, or its original thread was
+  found deleted. Use the **@** picker
   to address a channel member. A full name typed after **@** and followed by
   Space or closing punctuation, such as `,`, `.` or `'`, selects that person or
   agent unless a namesake or a longer name that begins the same way could be
