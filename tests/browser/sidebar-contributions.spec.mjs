@@ -735,17 +735,19 @@ appTest.describe("Solo header accessories", () => {
         name: "Actions for Work",
       });
       const workTitle = work.getByRole("button", { name: "Work", exact: true });
-      // Start with focus in Work. WebKit pointer clicks can keep prior focus.
-      await workTitle.focus();
       await workTitle.hover();
       await workActions.click();
+      const workMenu = page.getByRole("menu", { name: "Actions for Work" });
+      const newTask = workMenu.getByRole("menuitem", { name: "New task" });
+      await expect(newTask).toBeVisible();
       await expect(
-        page.getByRole("menuitem", { name: "New task" }),
+        workMenu.getByRole("menuitem", { name: "New chat" }),
       ).toBeVisible();
-      await expect(
-        page.getByRole("menuitem", { name: "New chat" }),
-      ).toBeVisible();
-      await page.keyboard.press("Escape");
+      // Start Escape inside the menu. A pointer click can leave focus outside it.
+      await newTask.focus();
+      await expect(newTask).toBeFocused();
+      await newTask.press("Escape");
+      await expect(workMenu).toHaveCount(0);
       await expect(workTitle).toBeFocused();
       await sidebar.getByRole("button", { name: "Other", exact: true }).hover();
       await expect(workActions.locator("..")).toHaveCSS("opacity", "0");
@@ -824,11 +826,10 @@ appTest.describe("Solo header accessories", () => {
       const actions = workspace.getByRole("button", {
         name: "Actions for Work",
       });
-      const timing = await time.boundingBox();
-      await page.mouse.move(
-        timing.x + timing.width / 2,
-        timing.y + timing.height / 2,
-      );
+      await workspace
+        .getByRole("button", { name: "Work", exact: true })
+        .hover();
+      await expect(actions.locator("..")).toHaveCSS("opacity", "1");
       await actions.click();
       await page
         .getByRole("menuitem", { name: "New channel", exact: true })
