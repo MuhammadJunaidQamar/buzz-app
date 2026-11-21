@@ -22,7 +22,10 @@ pub(crate) fn builder() -> Builder {
 const INTRO_GEOMETRY: &str = "onboarding-window-restore.json";
 // The plugin saves physical pixels without the scales they were measured at.
 // Buzz records them beside each save, as
-// {"main": {"scale": 2.0, "position": 1.0, "prev": 2.0}} (see `SavedScale`).
+// {"main": {"scale": 2.0, "position": 1.0, "prev": 2.0, "geometry": [...]}}
+// (see `SavedScale`). `geometry` names the save the scales belong to, so a
+// geometry file written without them (by an older build, or before an exit
+// finished) never takes a stale scale.
 const SCALE: &str = ".window-scale.json";
 const INTRO_SCALE: &str = "onboarding-window-scale.json";
 
@@ -76,21 +79,30 @@ struct Kept {
     prev: Option<f64>,
 }
 
+/// `restoring` mirrors the plugin's restore lock, held while `restore_state`
+/// runs: the plugin ignores Moved and Resized meanwhile.
 #[derive(Default)]
-struct KeptScale(std::sync::Mutex<Kept>);
+struct KeptScale {
+    kept: std::sync::Mutex<Kept>,
+    restoring: std::sync::atomic::AtomicBool,
+}
 
 fn kept_scale<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::State<'_, KeptScale> {
     if app.try_state::<KeptScale>().is_none() {
-        let file = app.path().app_config_dir().ok().and_then(|dir| {
-            let bytes = std::fs::read(dir.join(SCALE)).ok()?;
-            saved_scale(&bytes, "main")
-        });
+        let file = app
+            .path()
+            .app_config_dir()
+            .ok()
+            .and_then(|dir| restore_input(&dir, &app.filename(), "main", false)?.1);
         let kept = file.map_or_else(Kept::default, |saved| Kept {
             size: Some(saved.scale),
             position: Some(saved.position()),
             prev: Some(saved.prev()),
         });
-        app.manage(KeptScale(std::sync::Mutex::new(kept)));
+        app.manage(KeptScale {
+            kept: std::sync::Mutex::new(kept),
+            ..Default::default()
+        });
     }
     app.state::<KeptScale>()
 }
@@ -160,12 +172,13 @@ fn follow<R: Runtime>(window: &Window<R>, update: Update) {
     if window.label() != "main" {
         return;
     }
+    let kept = kept_scale(window.app_handle());
+    let restoring = kept.restoring.load(std::sync::atomic::Ordering::SeqCst);
+    if restoring && matches!(update, Update::Moved | Update::Resized) {
+        return;
+    }
     if let Ok(frame) = read() {
-        kept_scale(window.app_handle())
-            .0
-            .lock()
-            .unwrap()
-            .apply(update, frame);
+        kept.kept.lock().unwrap().apply(update, frame);
     }
 }
 
@@ -179,17 +192,24 @@ pub(crate) fn save_scale<R: Runtime>(app: &tauri::AppHandle<R>) {
 }
 
 fn write_kept_scale<R: Runtime>(app: &tauri::AppHandle<R>) {
-    let kept = *kept_scale(app).0.lock().unwrap();
+    let kept = *kept_scale(app).kept.lock().unwrap();
     let Some(scale) = kept.size else {
         return;
     };
-    let saved = SavedScale {
-        scale,
-        position: kept.position,
-        prev: kept.prev,
-    };
     let result = app.path().app_config_dir().and_then(|dir| {
-        std::fs::create_dir_all(&dir)?;
+        // Name the save these scales belong to: the plugin's file, just written.
+        let Some(saved) = std::fs::read(dir.join(app.filename()))
+            .ok()
+            .and_then(|bytes| saved_geometry(&bytes, "main"))
+        else {
+            return Ok(());
+        };
+        let saved = SavedScale {
+            scale,
+            position: kept.position,
+            prev: kept.prev,
+            geometry: Some(saved.pairing()),
+        };
         let scale = HashMap::from([("main", saved)]);
         std::fs::write(dir.join(SCALE), serde_json::to_vec(&scale)?)?;
         Ok(())
@@ -208,6 +228,9 @@ struct SavedScale {
     position: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     prev: Option<f64>,
+    /// The saved geometry these scales belong to (`SavedGeometry::pairing`).
+    #[serde(default)]
+    geometry: Option<[i64; 6]>,
 }
 
 impl SavedScale {
@@ -292,7 +315,13 @@ pub(crate) fn restore<R: Runtime>(window: &Window<R>) -> tauri::Result<()> {
             eprintln!("Could not restore Buzz window geometry: {error}");
         }
     }
-    window.restore_state(StateFlags::MAXIMIZED | StateFlags::FULLSCREEN)
+    let kept = kept_scale(window.app_handle());
+    kept.restoring
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let result = window.restore_state(StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
+    kept.restoring
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    result
 }
 
 /// The geometry to restore and the scales recorded with it: the onboarding
@@ -309,9 +338,11 @@ fn restore_input(
         (filename, SCALE)
     };
     let saved = saved_geometry(&std::fs::read(dir.join(geometry)).ok()?, label)?;
+    // Scales recorded for another save are stale: restore as without them.
     let scales = std::fs::read(dir.join(scale))
         .ok()
-        .and_then(|bytes| saved_scale(&bytes, label));
+        .and_then(|bytes| saved_scale(&bytes, label))
+        .filter(|scales| scales.geometry == Some(saved.pairing()));
     Some((saved, scales))
 }
 
@@ -334,6 +365,20 @@ struct SavedGeometry {
     _decorated: bool,
     #[serde(rename = "fullscreen")]
     fullscreen: bool,
+}
+
+impl SavedGeometry {
+    /// The numbers a restore converts, which name this save in the scale file.
+    fn pairing(&self) -> [i64; 6] {
+        [
+            self.width.into(),
+            self.height.into(),
+            self.x.into(),
+            self.y.into(),
+            self.prev_x.into(),
+            self.prev_y.into(),
+        ]
+    }
 }
 
 fn saved_geometry(bytes: &[u8], label: &str) -> Option<SavedGeometry> {
@@ -878,6 +923,12 @@ mod tests {
         super::saved_geometry(&serde_json::to_vec(state).unwrap(), "main").unwrap()
     }
 
+    /// A scale file with `fields`, recorded for the save `state`.
+    fn bound(state: &Value, mut fields: Value) -> Vec<u8> {
+        fields["geometry"] = json!(decode(state).pairing());
+        serde_json::to_vec(&json!({ "main": fields })).unwrap()
+    }
+
     #[test]
     fn requested_geometry_is_safe_even_while_getters_still_report_startup_bounds() {
         let area = rect(0, 25, 1440, 875);
@@ -1077,9 +1128,16 @@ mod tests {
             let bytes = std::fs::read(dir.path().join(name)).unwrap();
             let saved = super::saved_scale(&bytes, "main").unwrap();
             assert_eq!((saved.scale, saved.position), (scale, Some(scale)));
+            assert!(saved.geometry.is_some());
             assert_eq!(super::saved_scale(&bytes, "other"), None);
         }
         assert_eq!(super::saved_scale(br#"{"main":{"scale":0}}"#, "main"), None);
+        // Each scale file names the geometry file it was copied beside.
+        for intro in [true, false] {
+            let (_, scales) =
+                super::restore_input(dir.path(), &app.handle().filename(), "main", intro).unwrap();
+            assert_eq!(scales.map(|scales| scales.scale), Some(scale));
+        }
         super::restore(&window).unwrap();
         assert!(!dir.path().join(super::INTRO_GEOMETRY).exists());
         assert!(!dir.path().join(super::INTRO_SCALE).exists());
@@ -1135,14 +1193,14 @@ mod tests {
     #[cfg(not(windows))]
     fn planned(
         state: &Value,
-        scale: &[u8],
+        scale: Value,
         startup: f64,
         monitors: &[(tauri::PhysicalRect<i32, u32>, f64)],
     ) -> (tauri::LogicalPosition<f64>, tauri::LogicalSize<f64>) {
         let dir = tempfile::tempdir().unwrap();
         let live = tauri_plugin_window_state::DEFAULT_FILENAME;
         std::fs::write(dir.path().join(live), serde_json::to_vec(state).unwrap()).unwrap();
-        std::fs::write(dir.path().join(super::SCALE), scale).unwrap();
+        std::fs::write(dir.path().join(super::SCALE), bound(state, scale)).unwrap();
         let (saved, scales) = super::restore_input(dir.path(), live, "main", false).unwrap();
         let offset = tauri::PhysicalPosition::new(0, 0);
         let (position, size, logical) = super::restore_plan(
@@ -1165,7 +1223,7 @@ mod tests {
         // 1200x750 points cached on the 2x laptop, then moved to (2212, -200)
         // points on the 1x external without a Resized.
         let state = saved_state(2212, -200, 2400, 1500);
-        let split = br#"{"main":{"scale":2.0,"position":1.0,"prev":1.0}}"#;
+        let split = json!({"scale": 2.0, "position": 1.0, "prev": 1.0});
         assert_eq!(
             planned(&state, split, 2.0, &monitors),
             (
@@ -1178,7 +1236,7 @@ mod tests {
         state["main"]["maximized"] = json!(true);
         state["main"]["prev_x"] = json!(2212);
         state["main"]["prev_y"] = json!(-200);
-        let prev = br#"{"main":{"scale":2.0,"position":2.0,"prev":1.0}}"#;
+        let prev = json!({"scale": 2.0, "position": 2.0, "prev": 1.0});
         assert_eq!(
             planned(&state, prev, 2.0, &monitors).0,
             tauri::LogicalPosition::new(2212.0, -200.0),
@@ -1186,7 +1244,7 @@ mod tests {
         // An older file without position scales reads them as the size's.
         let state = saved_state(200, 66, 2400, 1500);
         assert_eq!(
-            planned(&state, br#"{"main":{"scale":2.0}}"#, 1.0, &monitors),
+            planned(&state, json!({"scale": 2.0}), 1.0, &monitors),
             (
                 tauri::LogicalPosition::new(100.0, 33.0),
                 tauri::LogicalSize::new(1200.0, 750.0)
@@ -1206,20 +1264,18 @@ mod tests {
         let live = tauri_plugin_window_state::DEFAULT_FILENAME;
         let input = |intro| super::restore_input(dir.path(), live, "main", intro);
         assert!(input(true).is_none() && input(false).is_none());
-        write(
-            live,
-            &serde_json::to_vec(&saved_state(100, 120, 960, 640)).unwrap(),
+        let (state, intro) = (
+            saved_state(100, 120, 960, 640),
+            saved_state(300, 320, 1200, 800),
         );
+        write(live, &serde_json::to_vec(&state).unwrap());
         // A plugin file without a scale file restores as on main.
         assert!(input(false).unwrap().1.is_none());
-        write(super::SCALE, br#"{"main":{"scale":2.0}}"#);
-        write(
-            super::INTRO_GEOMETRY,
-            &serde_json::to_vec(&saved_state(300, 320, 1200, 800)).unwrap(),
-        );
+        write(super::SCALE, &bound(&state, json!({"scale": 2.0})));
+        write(super::INTRO_GEOMETRY, &serde_json::to_vec(&intro).unwrap());
         write(
             super::INTRO_SCALE,
-            br#"{"main":{"scale":1.0,"position":2.0}}"#,
+            &bound(&intro, json!({"scale": 1.0, "position": 2.0})),
         );
         let (saved, scales) = input(true).unwrap();
         assert_eq!((saved.x, saved.width), (300, 1200));
@@ -1228,7 +1284,8 @@ mod tests {
             Some(super::SavedScale {
                 scale: 1.0,
                 position: Some(2.0),
-                prev: None
+                prev: None,
+                geometry: Some(decode(&intro).pairing()),
             })
         );
         let (saved, scales) = input(false).unwrap();
@@ -1241,8 +1298,11 @@ mod tests {
     fn window_events_update_the_kept_scales_and_only_saves_write_them() {
         let (dir, app) = fixture();
         let path = dir.path().join(super::SCALE);
-        let disk = br#"{"main":{"scale":2.0}}"#;
-        std::fs::write(&path, disk).unwrap();
+        let live = dir.path().join(tauri_plugin_window_state::DEFAULT_FILENAME);
+        let state = saved_state(200, 66, 2400, 1500);
+        std::fs::write(&live, serde_json::to_vec(&state).unwrap()).unwrap();
+        let disk = bound(&state, json!({"scale": 2.0}));
+        std::fs::write(&path, &disk).unwrap();
         let mut plugin = super::builder().build();
         plugin.initialize(app.handle(), Value::Null).unwrap();
         let mut window = |label| {
@@ -1255,7 +1315,7 @@ mod tests {
             window
         };
         let (main, other) = (window("main"), window("other"));
-        let scales = || *app.state::<super::KeptScale>().0.lock().unwrap();
+        let scales = || *app.state::<super::KeptScale>().kept.lock().unwrap();
         // The kept scales start from the file, as the plugin's cache does.
         super::restore(&main).unwrap();
         assert_eq!(scales(), kept(2.0, 2.0, 2.0));
@@ -1269,25 +1329,89 @@ mod tests {
         assert_eq!(scales(), kept(2.0, 1.0, 2.0));
         super::window_event(&main, &resized);
         assert_eq!(scales(), kept(1.0, 1.0, 2.0));
+        // While the plugin's restore holds its lock, it ignores Moved and
+        // Resized, and so does Buzz.
+        let restoring = &app.state::<super::KeptScale>().restoring;
+        restoring.store(true, std::sync::atomic::Ordering::SeqCst);
+        super::window_event(&main, &moved);
+        super::window_event(&main, &resized);
+        restoring.store(false, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(scales(), kept(1.0, 1.0, 2.0));
         // Events only update the cache, like the plugin's: a crash or Force
         // Quit before Exit leaves the old geometry on disk, and the old scale.
         assert_eq!(std::fs::read(&path).unwrap(), disk);
         // Exit: the plugin saves, then Buzz writes the scales of that save.
         plugin.on_event(app.handle(), &tauri::RunEvent::Exit);
         super::save_scale(app.handle());
+        let saved = super::saved_geometry(&std::fs::read(&live).unwrap(), "main").unwrap();
         assert_eq!(
             super::saved_scale(&std::fs::read(&path).unwrap(), "main"),
             Some(super::SavedScale {
                 scale: 1.0,
                 position: Some(1.0),
-                prev: Some(2.0)
+                prev: Some(2.0),
+                geometry: Some(saved.pairing()),
             })
+        );
+    }
+
+    #[test]
+    fn a_geometry_save_without_its_scales_restores_as_before() {
+        let monitors = mixed_scale_monitors();
+        let (dir, app) = fixture();
+        let mut plugin = super::builder().build();
+        plugin.initialize(app.handle(), Value::Null).unwrap();
+        let live = dir.path().join(tauri_plugin_window_state::DEFAULT_FILENAME);
+        let path = dir.path().join(super::SCALE);
+        // This build quit on the 2x laptop: a 1200x750-point window.
+        let laptop = saved_state(200, 66, 2400, 1500);
+        std::fs::write(&live, serde_json::to_vec(&laptop).unwrap()).unwrap();
+        std::fs::write(&path, bound(&laptop, json!({"scale": 2.0}))).unwrap();
+        // Then an older build, or an exit cut short between the two writes,
+        // saved 1200x750 pixels on the 1x external and left the 2x scale.
+        let external = saved_state(2212, -317, 1200, 750);
+        std::fs::write(&live, serde_json::to_vec(&external).unwrap()).unwrap();
+        let (saved, scales) =
+            super::restore_input(dir.path(), &app.handle().filename(), "main", false).unwrap();
+        assert_eq!(scales, None);
+        // Restored as on main, in physical pixels, not halved to 600x375 points.
+        let offset = tauri::PhysicalPosition::new(0, 0);
+        assert_eq!(
+            super::restore_plan(
+                saved,
+                scales,
+                offset,
+                1.0,
+                &monitors,
+                monitors[0],
+                &config()
+            ),
+            (
+                tauri::PhysicalPosition::new(2212, -317),
+                tauri::PhysicalSize::new(1200, 750),
+                None
+            ),
+        );
+        // The kept scales don't start from the stale file either, so the next
+        // Exit can't pair them with this save's cached frame.
+        let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap()
+            .as_ref()
+            .window();
+        plugin.window_created(window.clone());
+        super::restore(&window).unwrap();
+        assert_eq!(
+            *app.state::<super::KeptScale>().kept.lock().unwrap(),
+            super::Kept::default()
         );
     }
 
     #[test]
     fn nothing_is_written_without_a_kept_scale() {
         let (dir, app) = fixture();
+        let mut plugin = super::builder().build();
+        plugin.initialize(app.handle(), Value::Null).unwrap();
         super::write_kept_scale(app.handle());
         assert!(!dir.path().join(super::SCALE).exists());
     }
