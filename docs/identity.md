@@ -1544,7 +1544,7 @@ the pin. This reuses the broker's trusted-local-process boundary; it does not co
 keys or introduce another signing protocol.
 
 Without the pin, supported desktop development uses
-the native identity path; see the [host-mode matrix](contributing.md#shared-logic-and-host-boundaries). Creating/importing the
+the native identity path; see the [host-mode matrix](../CONTRIBUTING.md). Creating/importing the
 new native item does not update that old blob. Future reset/rotation would not
 synchronize copies automatically; neither operation is in this scope. Sign out
 does not touch that old blob.

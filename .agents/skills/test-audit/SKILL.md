@@ -25,7 +25,7 @@ add it yet:
    one primary test owner at the strongest boundary; another layer needs its
    own distinct risk, such as a transport or lifecycle failure the owner cannot
    reach. Pick the layer from
-   [Choosing a test layer](../../../docs/contributing.md#choosing-a-test-layer).
+   [Choosing a test layer](../../../CONTRIBUTING.md).
    Prefer extending a table-driven case or shared fixture over a
    near-duplicate test; consolidate duplicated setup in the same change.
 4. Does it need a production seam (export, flag, wrapper, injection hook) that no
@@ -87,8 +87,7 @@ not automatically deletable; the authoring gate still rejects new ones.
 Before judging a candidate, read the complete test and production owner, its
 entry point, callers, callees, sibling implementations, overlapping tests, CI
 routing, and relevant history. Read root and scoped `AGENTS.md` files first,
-then `docs/contributing.md` (Test organization, Choosing a test layer, Shared
-logic and host boundaries), `docs/browser-testing.md` for browser cases, and
+then `CONTRIBUTING.md`, `docs/browser-testing.md` for browser cases, and
 the owning design doc under `docs/`. When the test claims dependency-backed
 behavior, inspect the dependency source or types directly.
 
@@ -174,7 +173,7 @@ to increase deletion counts.
 
 Never edit source or tests while a test runner or hook is running in the
 checkout. Use the pinned `bin/` tools and the commands in
-`docs/contributing.md` and `docs/browser-testing.md`. Run `just scan` only when
+`CONTRIBUTING.md` and `docs/browser-testing.md`. Run `just scan` only when
 explicitly requested or needed to reproduce a broad integration failure;
 hosted CI owns broad validation.
 

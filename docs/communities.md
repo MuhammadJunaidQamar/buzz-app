@@ -10,7 +10,7 @@ each community's queries, live subscriptions, projections and durable outbox.
 ## Try it
 
 Configure `BUZZ_DEV_VIEWER` with your existing Buzz public key in `.env.local`
-([setup and safety notes](contributing.md#live-relay-development)), then run
+([setup and safety notes](../CONTRIBUTING.md#run-it)), then run
 `just web` and open the Local URL it prints, or use `just desktop` instead. The
 development broker runs on macOS and Linux and refuses an OS-store identity
 that does not match your explicit public pin.
@@ -526,7 +526,7 @@ first profile publication deliberately fails; retrying should add the membership
 while keeping the local name unchanged. No remote membership, profile, or policy
 acceptance is created by this fixture. Live validation with an authorized identity can restore existing profiles and
 read selected communities without posting test messages. The fixture itself is
-not evidence of live access; see [manual fixture setup](contributing.md#manual-browser-fixtures).
+not evidence of live access; see [manual fixture setup](../CONTRIBUTING.md).
 
 First-run profile setup preserves an existing relay profile, including one without
 a display name, and skips editing it. When restoring multiple saved communities

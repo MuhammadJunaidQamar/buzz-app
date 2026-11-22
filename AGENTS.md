@@ -1,6 +1,6 @@
 # Contributor instructions for AI agents
 
-Read [the contribution workflow](docs/contributing.md) for commands and validation.
+Read [the contribution workflow](CONTRIBUTING.md) for commands and validation.
 For interactive product work, default to edit → human tries the running app →
 adjust in the agreed worktree. Do not gate each feedback round on E2E, native
 builds, or full validation. Use mandatory hooks and focused behavior checks not
@@ -77,7 +77,7 @@ worktree's Hermit proxies to run `bin/rustup toolchain install` and
 `bin/pnpm install --frozen-lockfile`. Do not copy
 other ignored paths: Keychain credentials and pnpm's package cache are
 machine-shared, while dependencies and build output are regenerated. Git hooks
-need no per-worktree setup; see [Git hooks](docs/contributing.md#git-hooks).
+need no per-worktree setup; see [Git hooks](CONTRIBUTING.md).
 
 Agents run the desktop app with plain `just desktop`, never `just desktop me`:
 `me` signs in with the owner's release key and sets up their Keychain helper.
@@ -107,7 +107,7 @@ callers, and relevant design docs; preserve documented product decisions and
 ownership boundaries. Resolve answerable questions from evidence; ask before
 deviating from agreed scope or product behavior.
 
-For cross-host changes, follow [shared logic and host boundaries](docs/contributing.md#shared-logic-and-host-boundaries).
+For cross-host changes, follow [shared logic and host boundaries](CONTRIBUTING.md).
 Name the existing feature owner/current callers, preserved behavior or approved
 host differences, and which host the validation actually exercises. Keep shared
 contracts executable in the existing tests; frontend checks do not replace host
@@ -209,7 +209,7 @@ environment and checked snapshots; distinguish local measurements from hosted CI
 List deferred checks. Do not meet time budgets by skipping engines, dropping
 failure paths or weakening assertions. Enforce these rules during agent review;
 do not rely on contributors filling in a PR template. Follow the
-[test-layer review rules](docs/contributing.md#choosing-a-test-layer).
+[test-layer review rules](CONTRIBUTING.md).
 
 ## Deterministic tests
 
@@ -347,12 +347,12 @@ confirmation, not app runs.
 ## Before pushing
 
 - Use the agreed feature worktree and pinned `bin/` tools. Follow
-  [hook setup](docs/contributing.md#pre-commit-checks) once per clone where lhm
+  [hook setup](CONTRIBUTING.md) once per clone where lhm
   is absent; never bypass failures.
 - Refresh remote refs; confirm destination, base, and head. Review `git status`,
   the full PR diff, and `git diff --check` against the base. Include only intended
   files: no credentials, local configuration, or raw agent/session data.
-- Follow the [validation workflow](docs/contributing.md#interactive-product-iteration).
+- Follow the [validation workflow](CONTRIBUTING.md).
   Documentation-only changes need content, link, and diff checks, not source
   builds. Keep incomplete work in draft with deferred checks listed; hook success
   or a draft push does not establish validation.

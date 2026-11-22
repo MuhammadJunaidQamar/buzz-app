@@ -4,7 +4,7 @@
 > not the current plan or release approval; paths, test counts and uncommitted/pushed
 > descriptions below refer to their original checkpoints. For maintained decisions
 > and open gates, see [foundation status](../status.md); for current commands and
-> fixture URLs, see [contributing](../contributing.md).
+> fixture URLs, see [contributing](../../CONTRIBUTING.md).
 
 The architecture is a promising bounded relay data layer. Keep its session ownership,
 verified-event boundary, durable outbox, stable event IDs, and domain projections.

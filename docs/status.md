@@ -20,7 +20,7 @@ and acceptance gaps here; keep chronological results in the [archive](#historica
 The checkpoint is recorded at `deb1d310`, typed relay URLs at `a85fda6`, and the
 browser gate at `95eeacc`. Those are implementation checkpoints, not release tags.
 The recorded validation used Apple Silicon macOS and synthetic isolated transports.
-See [contributing](contributing.md) for maintained commands and test organization.
+See [contributing](../CONTRIBUTING.md) for maintained commands and test organization.
 
 ## Decisions to preserve
 

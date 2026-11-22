@@ -128,13 +128,13 @@ bin/just desktop
 
 Hermit in `bin/` pins every tool. Desktop builds also need the
 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). See
-[contributing](docs/contributing.md) for development setup, live relay
+[contributing](CONTRIBUTING.md) for development setup, live relay
 development, testing and hooks, and [plugin architecture](docs/plugin-architecture.md)
 to build plugins.
 
 ## Project resources
 
-- [Contributing](docs/contributing.md)
+- [Contributing](CONTRIBUTING.md)
 - [Plugin architecture and the `buzzodz` CLI](docs/plugin-architecture.md)
 - [Contextual identity names: cross-client spec and fixtures](src/bundled/identity-naming/README.md)
 - [Mention rules: cross-client spec and fixtures](src/bundled/mentions/README.md)

@@ -62,7 +62,7 @@ sidebar persistence, media insertion, and focus. Media coverage includes tab/pan
 associations, keyboard activation, and search clearing. Moving to shared styles is
 not a reason to remove a browser journey or weaken its behavioral assertions.
 
-Follow [the contribution workflow](contributing.md#interactive-product-iteration)
+Follow [the contribution workflow](../CONTRIBUTING.md)
 for iteration and completed-batch checks. Record deferred checks. A draft PR or
 running preview does not establish native behavior or full validation.
 

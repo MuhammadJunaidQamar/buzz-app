@@ -1939,7 +1939,7 @@ outcome disclosure. Ordinary replies and partial results retain their own rows.
 
 ### Try with an existing owner account
 
-Use the [public-pin/Keychain setup](contributing.md#live-relay-development) and run
+Use the [public-pin/Keychain setup](../CONTRIBUTING.md#run-it) and run
 `bin/just web` (or `bin/just desktop`). Open the printed Local URL, choose
 the agent's community and open a channel. Keep a runner active for that agent, with
 telemetry publication enabled, then give it work. This activity plugin does not

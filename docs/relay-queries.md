@@ -980,7 +980,7 @@ avoid nested-timer delays. `tests/fixtures/relay-startup.html` measures cold/war
 See [the archived query and delivery review](archive/foundation-review.md) for dated
 measurements, and [current limits and deferred choices](status.md#known-limits-and-deferred-choices)
 for outstanding work. These manual fixtures are not part of `pnpm test`; see
-[fixture setup](contributing.md#manual-browser-fixtures).
+[fixture setup](../CONTRIBUTING.md).
 
 
 ## Live coverage and quota recovery

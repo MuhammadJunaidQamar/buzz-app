@@ -15,9 +15,8 @@ coverage within 2%" this way:
 - **Evidence still decides each deletion.** The percentage is a ceiling, not a
   quota. When high-confidence candidates run out, stop and report the achieved
   number and the unproven remainder. Never lower the bar to reach the number.
-- **Coverage is an alarm, not a justification.** `docs/contributing.md` says
-  regression coverage is "about behavior, not test counts or a coverage
-  percentage". A drop demands an explanation; holding steady proves nothing.
+- **Coverage is an alarm, not a justification.** Regression coverage is
+  about behavior, not test counts or a coverage percentage. A drop demands an explanation; holding steady proves nothing.
 - **The goal is a series of campaigns,** one subsystem per PR.
 
 Before the baseline, confirm with the human what the goal leaves open:
