@@ -202,8 +202,8 @@ appTest(
 
     // A visit that began before the window loaded counts as incomplete
     // history, which cannot place the line above the first row. Re-enter the
-    // loaded history while read sync stays unavailable, so recovery can
-    // exercise divider insertion.
+    // loaded history while read sync stays unavailable: that visit shows its
+    // first screen with no line, and recovery must not draw one late.
     await page.getByRole("button", { name: /^Beta/ }).click();
     await expect(
       page.getByRole("textbox", { name: "Message #Beta", exact: true }),
@@ -211,6 +211,9 @@ appTest(
     await page.getByRole("button", { name: /^Alpha/ }).click();
     await expect(composer(page)).toBeVisible();
     await settle(page);
+    await expect(
+      page.locator('[data-channel-timeline="alpha"]'),
+    ).not.toHaveAttribute("data-first-screen", "pending");
 
     // Keep the recovery control open before measuring. Holding a request
     // through wheel input would race the real read-state network deadline.
@@ -240,10 +243,6 @@ appTest(
       "reader is partway through the tall first row",
     ).toBeGreaterThan(0);
     const beforeBoundaryAnchor = await anchor(page);
-    const beforeBoundaryBubble = await history(page)
-      .locator(`[data-message-id="${boundaryId}"] [data-bubble]`)
-      .boundingBox();
-    expect(beforeBoundaryBubble).not.toBeNull();
     await expect(separator(page)).toHaveCount(0);
     await page.mouse.move(0, 0);
 
@@ -257,8 +256,19 @@ appTest(
         ),
       )
       .toBe("snapshot");
-    await expect(separator(page)).toHaveCount(1);
+    // The shown visit settled with no line, so recovery moves nothing.
+    await settle(page);
+    await expect(separator(page)).toHaveCount(0);
     await expectAnchor(page, beforeBoundaryAnchor);
+    // The next visit draws the line on its first screen.
+    await page.getByRole("button", { name: /^Beta/ }).click();
+    await expect(
+      page.getByRole("textbox", { name: "Message #Beta", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: /^Alpha/ }).click();
+    await expect(composer(page)).toBeVisible();
+    await settle(page);
+    await expect(separator(page)).toHaveCount(1);
     const copied = await history(page).evaluate((element) => {
       const selection = document.getSelection();
       const range = document.createRange();
@@ -303,11 +313,6 @@ appTest(
       path: boundaryPath,
       contentType: "image/png",
     });
-    const entryMessageBounds = await history(page)
-      .locator(`[data-message-id="${boundaryId}"] [data-bubble]`)
-      .boundingBox();
-    expect(entryMessageBounds).not.toBeNull();
-    expect(entryMessageBounds.y).toBeCloseTo(beforeBoundaryBubble.y, 0);
     expect(await messageAfter(separator(page))).toBe(boundaryId);
 
     // The tall row proves clipped-reader anchoring, not whole-row reading.

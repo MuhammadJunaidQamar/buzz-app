@@ -277,9 +277,11 @@ function boundaryFixture({ reading = false } = {}) {
     listeners = new Set<() => void>();
   const syncListeners = new Set<() => void>();
   let readRevision = owner.session.unread.revision();
-  let syncSnapshot = reading
-    ? { ...owner.session.unread.sync(), capability: "frontier-sync" as const }
-    : owner.session.unread.sync();
+  // A host that can read the snapshot `completeReadStateSnapshot` delivers.
+  let syncSnapshot = {
+    ...owner.session.unread.sync(),
+    capability: reading ? ("frontier-sync" as const) : ("read-only" as const),
+  };
   const entries: {
     promise: Promise<void>;
     resolve: () => void;

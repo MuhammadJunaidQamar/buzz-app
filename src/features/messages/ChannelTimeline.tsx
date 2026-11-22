@@ -563,8 +563,9 @@ function Timeline({
     )
       return { ready: true };
     // Rows that nothing will verify (their head read failed, was cancelled or
-    // was never sent), or evidence whose repair failed, can place no line:
-    // the visit settles without one rather than hold its first screen.
+    // was never sent), evidence whose repair failed, or a read-state snapshot
+    // the host cannot read or failed to read can place no line: the visit
+    // settles without one rather than hold its first screen.
     if (
       (window.status === "ready" &&
         window.freshness !== "verified" &&
@@ -572,7 +573,11 @@ function Timeline({
         !headComing) ||
       (unreadSnapshot?.freshness === "stale" &&
         unreadSnapshot.error !== undefined &&
-        !unreadSnapshot.sampling)
+        !unreadSnapshot.sampling) ||
+      ("status" in unreadSync &&
+        unreadSync.completeness !== "snapshot" &&
+        (unreadSync.capability === "unsupported" ||
+          unreadSync.status === "error"))
     )
       return { ready: true };
     if (
