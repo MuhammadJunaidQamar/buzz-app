@@ -57,12 +57,18 @@ Some parts change less often than others:
 
 ## Trust
 
-Plugins aren't sandboxed. They're trusted code in the app's JavaScript, so a
-React error boundary can't contain an infinite loop or undo a side effect.
-Anything beyond the shared services (commands, processes, network origins,
-files) has to be declared in the manifest, and the owner reviews it at install
-and again whenever an update asks for more. If a plugin freezes startup, launch
-with `BUZZODZ_SAFE_MODE=1` to pause installed plugins for that launch.
+**Installing a plugin means trusting its author completely.** Plugins aren't
+sandboxed. They run as ordinary JavaScript inside the app, with the same reach as
+the app's own code. A plugin can read anything the app can, act as you on the
+relay, and reach your machine through the app. The manifest's access list
+(commands, processes, network origins, files) says what a plugin means to use so
+the host can wire it up. It isn't a boundary, and a plugin that wants to get
+around it can. Install only plugins from authors you'd trust with your account
+and your computer.
+
+Being in the same process also means a React error boundary can't contain an
+infinite loop or undo a side effect. If a plugin freezes startup, launch with
+`BUZZODZ_SAFE_MODE=1` to pause installed plugins for that launch.
 
 ## Writing one
 
