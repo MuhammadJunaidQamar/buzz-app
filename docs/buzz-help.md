@@ -1233,7 +1233,8 @@ Quitting Buzz also turns it off.
 - **Smart routing** is an optional plugin, off by default, that does nothing
   until decisions can be answered (Builderlab or a TypeSafe key). When you send a channel
   message without tagging anyone, Jev picks which of your agents on this
-  computer answers, or none, and wakes it. For a top-level message, Jev also
+  computer answers, or none, and gives it your message as if you had tagged
+  it, without editing or publishing anything. For a top-level message, Jev also
   decides where the answer goes: the top level in a working conversation, a
   thread in a shared channel, or the thread of an earlier message you follow up
   on. A reply in a thread stays in that thread. When you tag an agent, Jev
