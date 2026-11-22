@@ -18510,8 +18510,10 @@ describe("submit target", () => {
     expect(h.input()).toHaveValue("");
     expect(h.placeholder()).toBe("Answer the decision");
     expect(h.send()).toBeDisabled();
+    expect(h.onDraftChange.mock.calls).toEqual([[false]]);
+    fillComposer(h.input(), "Ship");
     fillComposer(h.input(), "Ship it");
-    expect(h.onDraftChange).toHaveBeenLastCalledWith(true);
+    expect(h.onDraftChange.mock.calls).toEqual([[false], [true]]);
     expect(h.drafts.get("a")?.text).toBe("Ship it");
     expect(readView("scope", "draft:channel", null)).toMatchObject({
       text: "Channel draft",
@@ -18521,7 +18523,8 @@ describe("submit target", () => {
     expect(h.onSubmit).toHaveBeenCalledExactlyOnceWith("Ship it");
     await waitFor(() => expect(h.input()).toHaveValue(""));
     expect(h.drafts.has("a")).toBe(false);
-    expect(h.onDraftChange).toHaveBeenLastCalledWith(false);
+    expect(h.onDraftChange.mock.calls).toEqual([[false], [true], [false]]);
+    expect(h.input()).toHaveFocus();
     expect(h.messages.send).not.toHaveBeenCalled();
     expect(h.onSend).not.toHaveBeenCalled();
     h.retarget({ submitTarget: undefined });
@@ -18545,6 +18548,11 @@ describe("submit target", () => {
     h.retarget({ submitTarget: h.target({ key: "b" }) });
     expect(h.input()).toHaveValue("");
     fillComposer(h.input(), "For b");
+    expect(h.onDraftChange).toHaveBeenLastCalledWith(true);
+    h.retarget({ submitTarget: h.target() });
+    expect(h.input()).toHaveValue("For a");
+    h.retarget({ submitTarget: undefined });
+    expect(h.input()).toHaveValue("");
     h.retarget({ submitTarget: h.target() });
     expect(h.input()).toHaveValue("For a");
     h.retarget({ submitTarget: h.target({ key: "b", keep: ["b"] }) });
@@ -18568,6 +18576,7 @@ describe("submit target", () => {
     expect(h.input()).toHaveValue("Ship it");
     expect(h.drafts.get("a")?.text).toBe("Ship it");
     expect(h.send()).toBeEnabled();
+    expect(h.input()).toHaveFocus();
   });
 
   it("keeps a draft that changed while its answer was pending", async () => {
@@ -18584,6 +18593,55 @@ describe("submit target", () => {
     expect(h.drafts.get("a")?.text).toBe("Ship it today");
   });
 
+  it("clears only the answered key's draft when the key changes while pending", async () => {
+    const h = targetFixture();
+    let resolve!: () => void;
+    h.onSubmit.mockImplementation(
+      () => new Promise<void>((done) => (resolve = done)),
+    );
+    h.drafts.set("b", { text: "For b", recipients: [] });
+    h.retarget({ submitTarget: h.target() });
+    fillComposer(h.input(), "Ship it");
+    await h.user.click(h.send());
+    h.retarget({ submitTarget: h.target({ key: "b" }) });
+    expect(h.input()).toHaveValue("For b");
+    await act(async () => resolve());
+    expect(h.drafts.has("a")).toBe(false);
+    expect(h.drafts.get("b")?.text).toBe("For b");
+    expect(h.input()).toHaveValue("For b");
+  });
+
+  it("a composer mounted while an answer is pending waits for it", async () => {
+    const h = targetFixture();
+    let resolve!: () => void;
+    h.onSubmit.mockImplementation(
+      () => new Promise<void>((done) => (resolve = done)),
+    );
+    h.retarget({ submitTarget: h.target() });
+    fillComposer(h.input(), "Ship it");
+    await h.user.click(h.send());
+    h.remount();
+    expect(h.input()).toHaveValue("Ship it");
+    expect(h.send()).toBeDisabled();
+    h.input().focus();
+    await h.user.keyboard("{Enter}");
+    expect(h.onSubmit).toHaveBeenCalledOnce();
+    await act(async () => resolve());
+    expect(h.input()).toHaveValue("");
+    expect(h.send()).toBeEnabled();
+    expect(h.drafts.has("a")).toBe(false);
+  });
+
+  it("clears the shown draft when its key is no longer kept", () => {
+    const h = targetFixture();
+    h.retarget({ submitTarget: h.target({ keep: ["a"] }) });
+    fillComposer(h.input(), "For a");
+    h.retarget({ submitTarget: h.target({ keep: [] }) });
+    expect(h.input()).toHaveValue("");
+    expect(h.drafts.has("a")).toBe(false);
+    expect(h.onDraftChange).toHaveBeenLastCalledWith(false);
+  });
+
   it("closes from the chip", async () => {
     const h = targetFixture();
     h.retarget({ submitTarget: h.target() });
@@ -18594,31 +18652,45 @@ describe("submit target", () => {
     expect(h.input()).toHaveFocus();
   });
 
-  it("refuses a draft with a chat card", async () => {
+  it.each([
+    { chatCards: ["[Session: PR 45 fixes](buzz://channel/session-id)"] },
+    { gifs: ["https://media.example.org/wave.gif"] },
+  ])("refuses a draft with %o", async (extra) => {
     const h = targetFixture();
     h.drafts.set("a", {
-      text: "",
+      text: "Ship it",
       recipients: [],
-      chatCards: ["[Session: PR 45 fixes](buzz://channel/session-id)"],
+      ...extra,
     } as MentionDraft);
     h.retarget({ submitTarget: h.target() });
     expect(screen.getByText("Remove the attachment to answer")).toBeVisible();
     expect(h.send()).toBeDisabled();
-    fireEvent.submit(screen.getByRole("form"));
+    h.input().focus();
+    await h.user.keyboard("{Enter}");
     expect(h.onSubmit).not.toHaveBeenCalled();
+    expect(h.messages.send).not.toHaveBeenCalled();
   });
 
   it("gives way to a message edit and returns after it", async () => {
     const h = targetFixture();
     h.setRows([editableMessage()]);
     h.retarget({ submitTarget: h.target() });
+    h.drafts.set("b", { text: "For b", recipients: [] });
     fireEvent.keyDown(h.input(), { key: "ArrowUp" });
     expect(screen.getByText("Editing message")).toBeVisible();
     expect(screen.queryByText("Answering: Pick a plan")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel edit" }));
-    expect(screen.getByText("Answering: Pick a plan")).toBeVisible();
-    expect(h.input()).toHaveValue("");
+    // The edit holds a key change until it ends.
+    h.retarget({ submitTarget: h.target({ key: "b" }) });
+    expect(screen.getByText("Editing message")).toBeVisible();
+    fillComposer(h.input(), "Edited text");
+    await h.user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(h.messages.edit).toHaveBeenCalledOnce();
     expect(h.onSubmit).not.toHaveBeenCalled();
+    h.setDelivery("accepted");
+    await waitFor(() =>
+      expect(screen.getByText("Answering: Pick a plan")).toBeVisible(),
+    );
+    expect(h.input()).toHaveValue("For b");
   });
 
   it("is ignored by a thread composer", () => {

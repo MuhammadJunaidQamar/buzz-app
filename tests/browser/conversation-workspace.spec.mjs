@@ -198,8 +198,9 @@ test.describe("thread workspace", () => {
   });
 });
 
-// The page's target reaches the host's real editor through `ui.Workspace`;
-// Enter answers it and publishes nothing, then the channel draft returns.
+// The page's target reaches the host's real editor through `ui.Workspace`:
+// Enter answers it, and the channel draft returns when it closes. (The
+// composer's unit tests prove that answering publishes nothing.)
 test("a page's submit target takes the composer's Enter without sending", async ({
   page,
   app,
@@ -222,7 +223,6 @@ test("a page's submit target takes the composer's Enter without sending", async 
   await page.keyboard.press("Enter");
   await expect(page.locator("output")).toHaveText("Answered: Ship it");
   await expect(composer).toHaveText("");
-  await expect(region.getByText("Ship it", { exact: true })).toHaveCount(0);
   await page
     .getByRole("button", { name: "Close Answering the fixture decision" })
     .click();

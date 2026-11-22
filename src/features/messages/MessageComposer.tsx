@@ -354,6 +354,9 @@ function recoveryFor(session: ComposerSession) {
 
 /** A workspace's drafts for its submit targets, by key. */
 export type SubmitDrafts = Map<string, MentionDraft>;
+// An answer outlives the composer that sent it: one mounted while it is
+// pending waits for it too.
+const pendingAnswers = new WeakMap<SubmitDrafts, Map<string, Promise<void>>>();
 /** A page's target that Send answers instead of sending (`ui.Workspace`'s
  * `submitTarget`). Its drafts stay apart from the channel's. */
 export type SubmitTarget = {
@@ -2008,16 +2011,24 @@ function Composer({
     return stop;
   }, [session, recoveryKey, scope, draftKey]);
   // The submit target's draft replaces the channel's, which returns when the
-  // target goes away. A message edit, or a send still settling, holds the swap.
+  // target goes away. A message edit, or a send not yet settled, holds the swap.
   const keep = target?.keep;
   const swapTarget = useEffectEvent(() => {
     const drafts = targetDrafts.current;
+    let dropped = false;
     if (drafts && keep)
       for (const key of drafts.keys())
-        if (!keep.includes(key)) drafts.delete(key);
+        if (!keep.includes(key)) {
+          drafts.delete(key);
+          dropped ||= key === shownTarget.current;
+        }
     const key = target?.key;
-    if (editing.target || accepted || !input.current) return;
-    if (key === shownTarget.current) return;
+    if (editing.target || accepted || sending || admitting || !input.current)
+      return;
+    if (key === shownTarget.current) {
+      if (dropped) clearShown();
+      return;
+    }
     if (shownTarget.current === undefined) {
       flushDraft();
       beforeTarget.current = {
@@ -2042,6 +2053,8 @@ function Composer({
       updateDraft(next);
       input.current.reset(next);
       reportTargetDraft(next);
+      const pending = drafts && pendingAnswers.get(drafts)?.get(key);
+      if (pending && !answerPending.current) awaitAnswer(key, pending);
     }
     completion.invalidate();
     setLinkEdit(null);
@@ -2051,7 +2064,14 @@ function Composer({
   // biome-ignore lint/correctness/useExhaustiveDependencies: The swap follows the target's key, its kept keys, and what holds it.
   useLayoutEffect(
     () => swapTarget(),
-    [target?.key, keep?.join("\n"), editingDraft, !!accepted],
+    [
+      target?.key,
+      keep?.join("\n"),
+      editingDraft,
+      !!accepted,
+      sending,
+      admitting,
+    ],
   );
   function resolveDraft(keep: boolean) {
     cancelDraftSave();
@@ -2842,7 +2862,8 @@ function Composer({
       conflict ||
       sendPending ||
       completion.composing.current ||
-      editing.target
+      editing.target ||
+      shownTarget.current !== undefined
     )
       return;
     // Alone with agents, the agent joins the toolbar, never the text. An empty
@@ -2935,7 +2956,7 @@ function Composer({
     if (
       conflict ||
       editing.target ||
-      shownKey !== undefined ||
+      shownTarget.current !== undefined ||
       completion.composing.current
     )
       return;
@@ -3101,24 +3122,49 @@ function Composer({
     answerPending.current = true;
     setAnswering(true);
     setError(undefined);
+    const pending = pendingAnswers.get(to.drafts) ?? new Map();
+    pendingAnswers.set(to.drafts, pending);
+    const run = Promise.resolve().then(() => to.onSubmit(text));
+    pending.set(key, run);
     try {
-      await to.onSubmit(text);
+      await run;
       const current = to.drafts.get(key);
       if (current && composerMarkdown(current) !== text) return;
       to.drafts.delete(key);
-      if (!live.current || shownTarget.current !== key) return;
-      const empty = mentionDraft("");
-      valueRef.current = empty;
-      updateDraft(empty);
-      input.current?.reset(empty);
-      reportTargetDraft(empty);
+      if (live.current && shownTarget.current === key) clearShown();
     } catch (reason) {
       if (live.current)
         setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
+      if (pending.get(key) === run) pending.delete(key);
       answerPending.current = false;
-      if (live.current) setAnswering(false);
+      if (live.current) {
+        // The disabled editor lost focus; it takes it back once editable.
+        focusRestoredDraft.current = shownTarget.current === key;
+        setAnswering(false);
+      }
     }
+  }
+  // Another composer's answer for this key: its sender clears the draft.
+  function awaitAnswer(key: string, run: Promise<void>) {
+    answerPending.current = true;
+    setAnswering(true);
+    void run
+      .catch(() => undefined)
+      .then(() => {
+        answerPending.current = false;
+        if (!live.current) return;
+        setAnswering(false);
+        if (shownTarget.current === key && !target?.drafts.has(key))
+          clearShown();
+      });
+  }
+  function clearShown() {
+    const empty = mentionDraft("");
+    valueRef.current = empty;
+    updateDraft(empty);
+    input.current?.reset(empty);
+    reportTargetDraft(empty);
   }
   async function send(human = false) {
     if (!permitted.current || voice.isCapturing() || forwarded.blocked) return;
@@ -4395,7 +4441,7 @@ function Composer({
                   saveDraft(next, "prefill");
                   return;
                 }
-                if (!editing.target) {
+                if (!editing.target && shownTarget.current === undefined) {
                   // The user's edit settles the seed on screen, as settled
                   // evidence does: clearing it lasts until the composer is
                   // shown again, while a newer message of the viewer's, sent
@@ -4785,6 +4831,7 @@ function Composer({
         )}
         {!editing.target &&
           !submission &&
+          shownKey === undefined &&
           (accepted || conflict || storageFailed) && (
             <div>
               <p role="alert">
