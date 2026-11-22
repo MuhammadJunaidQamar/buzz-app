@@ -32,6 +32,8 @@ import {
   type FinderDoc,
   type FinderResults,
 } from "./corpus.ts";
+import type { RegisteredSource } from "./service";
+import { SourceResults } from "./SourceResults";
 import type { ChannelSearchStatus, FinderSync } from "./sync";
 
 export type FinderScope = "channel" | "buzz";
@@ -77,13 +79,16 @@ type Props = {
   currentChannelId?: string | undefined;
   scope: FinderScope;
   onScopeChange: (scope: FinderScope) => void;
+  /** Another plugin's list, or a built-in one, in place of the two scopes. */
+  source?: RegisteredSource | undefined;
+  onSourceClose?: () => void;
   status?: ReactNode;
   openMessage: (doc: FinderDoc) => void;
 };
 
 export function FinderDialog(props: Props) {
   const [query, setQuery] = useState("");
-  // Closing clears the text; switching scope keeps it.
+  // Closing clears the text; switching scope or list keeps it.
   if (!props.open && query) setQuery("");
   const input = useRef<HTMLElement>(null);
   // The search field takes focus before the dialog notes what had it, so
@@ -118,7 +123,8 @@ export function FinderDialog(props: Props) {
     <Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
-      title="Find in your conversations"
+      // Screen readers name the window after the list it shows.
+      title={props.source?.title ?? "Find in your conversations"}
       footerGap="none"
       motion="default"
       dismissOnOutsideClick
@@ -130,7 +136,25 @@ export function FinderDialog(props: Props) {
       finalFocus={returnTo}
     >
       {props.open &&
-        (props.scope === "buzz" && props.session ? (
+        (props.source ? (
+          <SourceResults
+            // A new list starts clean: no rows from the last one.
+            key={props.source.key}
+            source={props.source}
+            query={query}
+            revision={props.revision}
+            setQuery={setQuery}
+            input={input}
+            open={props.open}
+            session={props.session}
+            onOpenChange={props.onOpenChange}
+            onClose={() => {
+              props.onSourceClose?.();
+              input.current?.focus();
+            }}
+            footer={props.status}
+          />
+        ) : props.scope === "buzz" && props.session ? (
           <AllResults {...contents} session={props.session} />
         ) : (
           <LocalResults {...contents} />

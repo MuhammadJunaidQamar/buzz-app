@@ -13,8 +13,10 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ShortcutsService } from "../../features/shortcuts/service";
 import type { PluginModule } from "../../plugins/api";
 import { PluginRuntime } from "../../plugins/runtime";
+import type { createRelaySession } from "../../features/relay/session";
 import * as finderPlugin from "./index";
 import { topInterest } from "./interest";
+import type { Finder, FinderItem, FinderSource } from "./service";
 
 const viewer = "a".repeat(64);
 const communityOrigin = "https://relay.example.org";
@@ -47,10 +49,30 @@ afterEach(async () => {
   Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
 });
 
-async function mount() {
+/** A plugin that uses `ctx.finder` the way another plugin would. */
+const consumer = (register?: () => FinderSource) => {
+  const used: { finder?: Finder | undefined } = {};
+  const module: PluginModule = {
+    apply(ctx) {
+      ctx.inject(["finder"], (child) => {
+        used.finder = child.finder;
+        if (register) child.finder?.registerSource(register());
+      });
+    },
+  };
+  return { module, used };
+};
+
+async function mount(
+  plugins: Record<string, PluginModule> = {},
+  connected?: ReturnType<typeof createRelaySession>,
+) {
   const ctx = new Context();
   contexts.push(ctx);
-  const modules: Record<string, PluginModule> = { "buzz.finder": finderPlugin };
+  const modules: Record<string, PluginModule> = {
+    "buzz.finder": finderPlugin,
+    ...plugins,
+  };
   const runtime = new PluginRuntime(ctx, async (plugin) => {
     const module = modules[plugin.manifest.id];
     if (!module) throw new Error(`No module for ${plugin.manifest.id}`);
@@ -67,12 +89,23 @@ async function mount() {
   // The real dispatcher, so typing guards apply as in the app.
   const shortcuts = new ShortcutsService(ctx, window);
   let Overlay: ComponentType = () => null;
+  const relaySnapshot = connected
+    ? {
+        status: "ready",
+        cached: false,
+        generation: 1,
+        scope,
+        viewer,
+        session: connected.session,
+      }
+    : { status: "connecting" };
   ctx.provide("relay", {
-    snapshot: () => ({ status: "connecting" }),
+    snapshot: () => relaySnapshot,
     subscribe: () => () => {},
   } as never);
+  const open = vi.fn(async () => ({ status: "opened" }));
   ctx.provide("navigation", {
-    open: vi.fn(async () => ({ status: "opened" })),
+    open,
     snapshot: () => snapshot,
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -109,10 +142,12 @@ async function mount() {
       ).toBe(true),
     );
   };
-  await enable("buzz.finder");
+  await enable("buzz.finder", ...Object.keys(plugins));
   // Load the lazy dialog first, so its import time can't race the waits.
   await import("./FinderDialog");
   return {
+    enable,
+    open,
     visit: (id: string, channelId: string) =>
       navigate({
         id,
@@ -132,8 +167,15 @@ async function mount() {
 
 const selectedTab = async () =>
   (await screen.findByRole("tab", { selected: true })).textContent;
+const rows = () =>
+  screen.queryAllByRole("option").map((row) => row.textContent ?? "");
 const type = (value: string) =>
   fireEvent.change(screen.getByRole("combobox"), { target: { value } });
+const item = (label: string, run = vi.fn()): FinderItem => ({
+  id: label.toLowerCase(),
+  label,
+  run,
+});
 
 test("counts each visit to a conversation once", async () => {
   const { visit, notify } = await mount();
@@ -203,13 +245,159 @@ test("⌘P searches the open conversation, else all of Buzz; ⌘⇧P switches in
   composer.remove();
 });
 
-test("This channel follows the conversation on screen, keeping the text", async () => {
-  const { show, visit, leave } = await mount();
+test("another plugin opens its own list; Finder ranks it and Enter runs the item", async () => {
+  // Like a pane jump: the item moves focus, and closing leaves it there.
+  const here = document.createElement("button");
+  const there = document.createElement("button");
+  document.body.append(here, there);
+  here.focus();
+  const banana = vi.fn(() => there.focus());
+  const fruit = consumer(() => ({
+    id: "list",
+    title: "Fruit",
+    items: () => [item("Apple"), item("Banana", banana), item("Cherry")],
+  }));
+  // Same local ID from another plugin: no collision.
+  const veg = consumer(() => ({
+    id: "list",
+    title: "Vegetables",
+    items: () => [item("Bean")],
+  }));
+  const { show, visit } = await mount({
+    "example.fruit": fruit.module,
+    "example.veg": veg.module,
+  });
+  show();
+  await act(async () => fruit.used.finder?.open("example.fruit/list"));
+  type("ban");
+  expect(await screen.findByRole("combobox")).toHaveValue("ban");
+  expect(screen.getByRole("dialog", { name: "Fruit" })).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Remove Fruit search scope" }),
+  ).toBeVisible();
+  expect(rows()).toEqual([expect.stringContaining("Banana")]);
+  await act(async () => screen.getByRole("option").click());
+  expect(banana).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(there).toHaveFocus();
+  here.remove();
+  there.remove();
+  await act(async () => veg.used.finder?.open("example.veg/list"));
+  expect(await screen.findByRole("combobox")).toHaveValue("");
+  expect(rows()).toEqual([expect.stringContaining("Bean")]);
+  // The two scopes by key; a bare local ID names no list, so Finder opens
+  // as ⌘P does.
+  act(() => visit("v1", "crew"));
+  await act(async () => veg.used.finder?.open("buzz.finder/all"));
+  expect(await selectedTab()).toBe("All of Buzz");
+  await act(async () => veg.used.finder?.open("list"));
+  expect(await selectedTab()).toBe("This channel");
+  await act(async () => veg.used.finder?.open("buzz.finder/all"));
+  await act(async () => veg.used.finder?.open("buzz.finder/channel"));
+  expect(await selectedTab()).toBe("This channel");
+});
+
+test("a source leaves when its plugin stops, and All of Buzz shows instead", async () => {
+  const fruit = consumer(() => ({
+    id: "list",
+    title: "Fruit",
+    items: () => [item("Apple")],
+  }));
+  const { show, enable } = await mount({ "example.fruit": fruit.module });
+  show();
+  await act(async () => fruit.used.finder?.open("example.fruit/list"));
+  expect(rows()).toEqual([expect.stringContaining("Apple")]);
+  await enable("buzz.finder");
+  expect(await selectedTab()).toBe("All of Buzz");
+  expect(
+    screen.queryByRole("button", { name: "Remove Fruit search scope" }),
+  ).not.toBeInTheDocument();
+  // Coming back, it waits to be opened again.
+  await enable("buzz.finder", "example.fruit");
+  await vi.waitFor(() => expect(fruit.used.finder).toBeDefined());
+  expect(await selectedTab()).toBe("All of Buzz");
+  expect(
+    screen.queryByRole("button", { name: "Remove Fruit search scope" }),
+  ).not.toBeInTheDocument();
+});
+
+test("a failing or empty list says so", async () => {
+  const broken = consumer(() => ({
+    id: "broken",
+    title: "Broken",
+    items: () => {
+      throw new Error("no list");
+    },
+  }));
+  const empty = consumer(() => ({
+    id: "empty",
+    title: "Empty",
+    items: () => [],
+  }));
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const { show } = await mount({
+    "example.broken": broken.module,
+    "example.empty": empty.module,
+  });
+  show();
+  await act(async () => broken.used.finder?.open("example.broken/broken"));
+  expect(await screen.findByText("This list couldn't load.")).toBeVisible();
+  await act(async () => empty.used.finder?.open("example.empty/empty"));
+  expect(await screen.findByText("This list is empty.")).toBeVisible();
+  type("x");
+  expect(
+    await screen.findByText("Nothing matches. Try fewer letters."),
+  ).toBeVisible();
+});
+
+test("switching to another list keeps the text and shows only its rows", async () => {
+  const ran = vi.fn();
+  const first = consumer(() => ({
+    id: "first",
+    title: "First",
+    items: () => [item("From first", ran)],
+  }));
+  const second = consumer(() => ({
+    id: "second",
+    title: "Second",
+    items: () => [item("From second")],
+  }));
+  const { show } = await mount({
+    "example.first": first.module,
+    "example.second": second.module,
+  });
+  show();
+  await act(async () => first.used.finder?.open("example.first/first"));
+  type("from");
+  expect(rows()).toEqual([expect.stringContaining("From first")]);
+  await act(async () => second.used.finder?.open("example.second/second"));
+  expect(screen.getByRole("combobox")).toHaveValue("from");
+  expect(rows()).toEqual([expect.stringContaining("From second")]);
+  expect(ran).not.toHaveBeenCalled();
+});
+
+test("⌘P leaves a list for the two scopes with the text kept, and This channel follows the conversation on screen", async () => {
+  const fruit = consumer(() => ({
+    id: "list",
+    title: "Fruit",
+    items: () => [item("Apple")],
+  }));
+  const { show, visit, leave } = await mount({
+    "example.fruit": fruit.module,
+  });
   show();
   visit("v1", "crew");
-  fireEvent.keyDown(document.body, { key: "p", code: "KeyP", ctrlKey: true });
-  expect(await selectedTab()).toBe("This channel");
+  await act(async () => fruit.used.finder?.open("example.fruit/list"));
   type("ap");
+  fireEvent.keyDown(screen.getByRole("combobox"), {
+    key: "p",
+    code: "KeyP",
+    ctrlKey: true,
+  });
+  expect(await selectedTab()).toBe("This channel");
+  expect(screen.getByRole("combobox")).toHaveValue("ap");
   act(() => leave());
   expect(await selectedTab()).toBe("All of Buzz");
   expect(screen.getByRole("tab", { name: "This channel" })).toHaveAttribute(

@@ -5,6 +5,7 @@ import { relayPartition } from "../../features/relay/partition";
 import { activeModal } from "../../shared/design-system/overlayLayer";
 import { createCorpus } from "./corpus.ts";
 import { noteInterest, topInterest } from "./interest";
+import { provideFinder, type RegisteredSource } from "./service";
 import type { FinderScope } from "./FinderDialog";
 import {
   type FinderSync,
@@ -27,6 +28,8 @@ type State = Readonly<{
   status?: FinderSyncStatus | undefined;
   sync?: FinderSync | undefined;
   scope: FinderScope;
+  /** The key of an open source other than the two scopes. */
+  source?: string | undefined;
 }>;
 
 export const apply: PluginModule["apply"] = (ctx) => {
@@ -65,13 +68,25 @@ export const apply: PluginModule["apply"] = (ctx) => {
   const inConversation = () =>
     ctx.navigation.snapshot().entry.target.kind === "conversation";
   /** Opens Finder, or switches scope while it's open, keeping the text. */
-  const show = (scope: FinderScope) => {
+  const show = (scope: FinderScope, source?: string) => {
     // Searching a channel counts once per switch, not per key press.
-    if (scope === "channel" && (!state.open || state.scope !== "channel"))
+    if (
+      scope === "channel" &&
+      !source &&
+      (!state.open || state.scope !== "channel" || state.source)
+    )
       interested(2);
-    set({ open: true, scope });
+    set({ open: true, scope, source });
   };
   const here = (): FinderScope => (inConversation() ? "channel" : "buzz");
+  // `buzz.finder/channel` and unknown keys open as ⌘P does.
+  const sources = provideFinder(ctx, (source) =>
+    source === "buzz.finder/all"
+      ? show("buzz")
+      : source && known(source)
+        ? show("buzz", source)
+        : show(here()),
+  );
   /** Opens a conversation in the connected community. */
   const openConversation = (
     channelId: string,
@@ -88,6 +103,18 @@ export const apply: PluginModule["apply"] = (ctx) => {
       ...(extra.threadRootId && { threadRootId: extra.threadRootId }),
     });
   };
+  const find = (
+    key: string | undefined,
+    registered: readonly RegisteredSource[],
+  ) => (key ? registered.find((entry) => entry.key === key) : undefined);
+  const known = (key: string) => !!find(key, sources.snapshot());
+  // A list that goes away leaves All of Buzz, and doesn't come back unasked.
+  ctx.effect(() =>
+    sources.subscribe(() => {
+      if (state.source && !known(state.source))
+        set({ source: undefined, scope: "buzz" });
+    }),
+  );
   ctx.effect(() => {
     let visit: string | undefined;
     const visited = () => {
@@ -186,8 +213,12 @@ export const apply: PluginModule["apply"] = (ctx) => {
   ctx.pages.registerOverlay({
     id: "finder",
     component: function Finder() {
-      const { open, revision, session, status, sync, scope } =
+      const { open, revision, session, status, sync, scope, source } =
         useSyncExternalStore(store.subscribe, store.snapshot);
+      const registered = useSyncExternalStore(
+        sources.subscribe,
+        sources.snapshot,
+      );
       const target = useSyncExternalStore(
         ctx.navigation.subscribe,
         ctx.navigation.snapshot,
@@ -210,6 +241,8 @@ export const apply: PluginModule["apply"] = (ctx) => {
             currentChannelId={currentChannelId}
             scope={scope === "channel" && !currentChannelId ? "buzz" : scope}
             onScopeChange={show}
+            source={find(source, registered)}
+            onSourceClose={() => set({ source: undefined, scope: "buzz" })}
             status={
               !session ? (
                 <p className="px-3 text-body-sm text-subtle">
