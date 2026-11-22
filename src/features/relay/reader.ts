@@ -163,13 +163,12 @@ export function createRelayReader(
     while (!closed && !suspended && !recovering) {
       const active = [...jobs.values()].filter((job) => job.running);
       const queued = [...jobs.values()].filter((job) => !job.running);
-      const urgent = queued.find((job) => job.urgent);
-      // Three reads at a time, and one more lane only for an urgent read,
-      // so a screen never waits for a slot behind ordinary work.
-      if (active.length >= (urgent ? 4 : 3)) return;
+      // Three reads at a time. Sessions on one relay share the browser
+      // broker's six (MAX_INFLIGHT); a seventh is refused.
+      if (active.length >= 3) return;
       const background = active.some((job) => job.priority === "background");
       const job =
-        urgent ??
+        queued.find((job) => job.urgent) ??
         queued.find((job) => job.priority === "foreground") ??
         (!background ? queued[0] : undefined);
       if (!job) return;

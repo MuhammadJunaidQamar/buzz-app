@@ -52,24 +52,24 @@ it("reserves foreground capacity and promotes an existing queued background read
   next().respond([]);
   await Promise.all([a, b, c, promoted]);
 });
-it("gives urgent reads one lane past the cap and starts them ahead of queued work", async () => {
+it("starts urgent reads ahead of queued work without raising the cap", async () => {
   const { read, pending, next } = setup();
   const heads = (): unknown[] =>
     pending.map(({ filters }) => filters[0]?.["#h"]?.[0]);
   const running = ["a", "b", "c"].map((id) => read(filter(id)));
   const queued = read(filter("d"));
   const hovered = read(filter("e"));
-  expect(heads()).toEqual(["a", "b", "c"]);
-  // A screen that opens on a queued read promotes it into the lane.
-  const opened = read(filter("e"), { urgent: true });
-  expect(heads()).toEqual(["a", "b", "c", "e"]);
-  // The lane holds one read: the next urgent read waits, then goes first.
   const urgent = read(filter("f"), { urgent: true });
-  expect(heads()).toEqual(["a", "b", "c", "e"]);
+  // A screen that opens on a queued read promotes it; urgent reads keep
+  // their order.
+  const opened = read(filter("e"), { urgent: true });
+  expect(heads()).toEqual(["a", "b", "c"]);
   next().respond([]);
   await flush();
-  expect(heads()).toEqual(["b", "c", "e", "f"]);
+  expect(heads()).toEqual(["b", "c", "e"]);
   next().respond([]);
+  await flush();
+  expect(heads()).toEqual(["c", "e", "f"]);
   next().respond([]);
   await flush();
   expect(heads()).toEqual(["e", "f", "d"]);
