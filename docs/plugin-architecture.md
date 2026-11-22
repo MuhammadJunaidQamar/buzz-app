@@ -250,6 +250,24 @@ Browser installation is not supported; the browser shows a desktop-only explanat
 An organization can recommend plugin sources through a policy file next to the profile
 folders; see [managed plugin sources](managed-plugins.md).
 
+## Plugin requirements
+
+A plugin that cannot work without something the device may lack declares it in
+`manifest.json`:
+
+```json
+"requires": ["decisions"]
+```
+
+`decisions` needs a decisions provider: `ctx.decisions.status()` other than
+`unavailable`. A provider that is still `checking`, `unconfirmed` or
+`needs-setup` counts, so the plugin handles a decision that fails. Until the
+device has what a plugin requires, Buzz does not start it, and Settings shows
+why, with its Turn on button disabled. The owner's on/off choice is kept: an
+enabled plugin starts when a provider is registered and stops when the last one
+goes. Older apps refuse a manifest with `requires`, so declare it only when the
+plugin needs it.
+
 ## Git plugin updates
 
 A plugin declares support in its installed `manifest.json`:
@@ -1341,7 +1359,21 @@ chat. `topLevel: true`, without `root`, wakes it at the top level of a channel
 that is not a Solo chat, for example to start a new thread there. The agent is told
 the text comes from the plugin, not its owner, and is data, so quote what others
 wrote (comments, check output) rather than phrasing it as instructions. It
-throws when this copy does not run the agent or its queue is full. Claude, Codex and Goose accept plugin wakes; Pi ignores them. Attention delivery uses a separate internal `attention` trigger in the Interest lane, accepted by all four harnesses. Its Interest instructions retain their instruction framing, while observed messages remain data. A channel-only Attention address supplies a default posting destination and allows explicit thread replies outside Solo chats.
+throws when this copy does not run the agent or its queue is full. Claude, Codex and Goose accept plugin wakes; Pi ignores them.
+
+`ctx.agents.registerMentionPlacement({ id, place })` lets one plugin decide
+where the owner's top-level mentions of local agents are answered. Before the
+harness starts the turn, Buzz calls `place({ agent, channel, event }, signal)`
+and waits at most 3 seconds. It resolves `{ topLevel: true }` or `{ root }`
+(another message's 64-hex id, such as an earlier one the mention follows up on),
+optionally with `note`: private text added to that turn. The harness then
+answers there exactly as for a wake with that `topLevel` or `root`: the turn's
+conversation, its prompt and the default of a `send` without `reply` all follow
+it. A timeout, a throw, `undefined` or a malformed place keeps today's place, a
+thread on the message. A mention inside a thread is never asked about, and when
+two plugins register, neither decides. Goose follows the place today; Claude and
+Codex still answer in a thread on the message, with the note. Feature-detect the
+method. Attention delivery uses a separate internal `attention` trigger in the Interest lane, accepted by all four harnesses. Its Interest instructions retain their instruction framing, while observed messages remain data. A channel-only Attention address supplies a default posting destination and allows explicit thread replies outside Solo chats.
 
 An agent type's `run` gets the agent's handle, which publishes, reads and
 uploads as the agent. For agents that act on something other than a message,

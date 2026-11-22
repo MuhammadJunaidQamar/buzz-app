@@ -84,6 +84,7 @@ import {
   wakeAnchor,
   wakeLands,
 } from "../../features/agent-harness/plugin-wake";
+import { placedAnchor } from "../../features/agents/mention-placement";
 import {
   CONTEXT_LIMIT,
   type Scope,
@@ -633,6 +634,7 @@ export class GooseRuntime {
       named,
       gateway: offered,
       gatewayFallback,
+      placement,
     } = delivery;
     // Unaddressed watches and timers come as standalone turns (`runOnce`).
     if (
@@ -688,7 +690,11 @@ export class GooseRuntime {
       entry.team = team ?? "";
     }
     const event =
-      trigger.type !== "mention" ? wakeAnchor(trigger) : trigger.event;
+      trigger.type !== "mention"
+        ? wakeAnchor(trigger)
+        : placement && "root" in placement
+          ? placedAnchor(trigger.event, placement.root)
+          : trigger.event;
     const channel =
       channelId ?? event.tags.find((tag) => tag[0] === "h")?.[1] ?? undefined;
     if (!channel) return;
@@ -712,7 +718,10 @@ export class GooseRuntime {
       channel,
       signal,
     );
-    const topLevel = solo || wake?.topLevel === true;
+    const topLevel =
+      solo ||
+      wake?.topLevel === true ||
+      (!!placement && "topLevel" in placement);
     if (wake && !wakeLands(wake, topLevel)) return ignored?.();
     const gateway = offered && (await this.routed(entry, offered));
     if (offered && !admittedDeferred) signal.throwIfAborted();
