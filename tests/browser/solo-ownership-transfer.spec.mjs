@@ -72,6 +72,8 @@ for (const opening of [true, false])
       await page.route("**/api/relay/primary/query", async (route) => {
         const response = await route.fetch();
         const events = await response.json();
+        // A refusal (the broker's concurrency limit) passes through as is.
+        if (!Array.isArray(events)) return route.fulfill({ response });
         await route.fulfill({
           response,
           json: events.map((event) => {
