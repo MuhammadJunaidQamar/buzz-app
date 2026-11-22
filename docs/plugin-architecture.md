@@ -1353,8 +1353,11 @@ answers there exactly as for a wake with that `topLevel` or `root`: the turn's
 conversation, its prompt and the default of a `send` without `reply` all follow
 it. A timeout, a throw, `undefined` or a malformed place keeps today's place, a
 thread on the message. A mention inside a thread is never asked about, and when
-two plugins register, neither decides. Goose follows the place today; Claude and
-Codex still answer in a thread on the message, with the note. Feature-detect the
+two plugins register, neither decides. Every harness (Goose, Claude Code, Codex,
+Pi and the harness kit) takes a placed mention through one helper,
+`deliveryPlace` in `agent-harness/plugin-wake.ts`, which also places wakes, so
+the turn has the matching wake's session, context block and default `send`
+target. The note is only extra text on that turn. Feature-detect the
 method. Attention delivery uses a separate internal `attention` trigger in the Interest lane, accepted by all four harnesses. Its Interest instructions retain their instruction framing, while observed messages remain data. A channel-only Attention address supplies a default posting destination and allows explicit thread replies outside Solo chats.
 
 An agent type's `run` gets the agent's handle, which publishes, reads and

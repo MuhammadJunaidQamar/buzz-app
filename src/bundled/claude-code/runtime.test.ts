@@ -2816,6 +2816,51 @@ it("reports a failed wake at its thread's root, never at the wake's own id", asy
   expect(JSON.stringify(published)).not.toContain(WAKE_ID);
 });
 
+it("answers a placed mention where the matching wake goes: the same session, context and default send", async () => {
+  const earlier = message("1", "The checklist");
+  const mention = message("2", "@Claude back to the checklist", {
+    created_at: 101,
+    tags: [
+      ["h", channel],
+      ["p", self],
+    ],
+  });
+  const turn = async (
+    trigger: Delivery["trigger"],
+    picks: Partial<Delivery> = {},
+  ) => {
+    const f = setup([earlier], { hold: true });
+    try {
+      await f.deliver(trigger, picks);
+      await vi.waitFor(() =>
+        expect(f.claudes().some((process) => process.prompts.length)).toBe(
+          true,
+        ),
+      );
+      const claude = f.claudes().find((process) => process.prompts.length);
+      const prompt = claude?.prompts[0] ?? "";
+      await send(claude, "placed-send", { text: "Placed" });
+      return {
+        context: prompt.match(/<context>[\s\S]*?<\/context>/)?.[0],
+        tags: f.published.filter((event) => event.kind === 9).at(-1)?.tags,
+      };
+    } finally {
+      f.runtime.dispose();
+    }
+  };
+  for (const [placement, wake] of [
+    [{ topLevel: true }, { ...pluginWake(), topLevel: true }],
+    [{ root: earlier.id }, pluginWake(earlier.id)],
+  ] as const) {
+    const placed = await turn(
+      { type: "mention", event: mention },
+      { placement },
+    );
+    expect(placed.context, JSON.stringify(placement)).toBeDefined();
+    expect(placed, JSON.stringify(placement)).toEqual(await turn(wake));
+  }
+});
+
 it("takes a wake with no thread only in a Solo chat", async () => {
   const ignored = vi.fn();
   const stream = setup();
