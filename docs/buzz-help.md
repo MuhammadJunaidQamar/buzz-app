@@ -1283,15 +1283,22 @@ Quitting Buzz also turns it off.
   that conversation when you go to another conversation or page and come back,
   until you close it. Reloading Buzz does not restore it. The Terminal drawer
   closes when you leave the conversation.
-- **Inline threads**: **Settings → Appearance → Open threads in → Inline**
-  opens a thread you choose from the timeline over the conversation's message
-  box, with the thread's own reply box in its place. A conversation has one at
-  a time; opening another replaces it. **Move to side panel** moves it, and any
-  reply you were writing, to a thread tab. A thread that already has a tab
-  opens there instead. Links to threads, Solo threads and threads in read-only
-  channels still open as tabs. Back closes the thread and Forward opens it
-  again; ✕ or Escape closes it for good. Leaving the channel leaves it behind,
-  and Back brings it back. Reloading Buzz restores it.
+- **Inline**: **Settings → Appearance → Open threads in → Inline** opens
+  what you choose from a message over the view it is in instead of in a tab.
+  A thread from the timeline opens over the conversation's message box, with
+  the thread's own reply box in its place; a conversation has one at a time,
+  and opening another replaces it. Profiles from avatars and names, pull
+  requests and issues, Changes and plugins' link panels open over the message
+  box of the view they were opened from (the conversation, an inline thread or
+  a thread tab) at full height, one at a time; opening another replaces it.
+  **Open as tab** moves a panel to a tab, and **Move to side panel** moves a
+  thread, with any reply you were writing, to a thread tab. Something that
+  already has a tab opens there instead. Huddles, Canvas, BuilderLab apps and
+  the Terminal still open as tabs or drawers, and links to Solo chats go to
+  the chat. Solo threads, threads in read-only channels and links to threads
+  in other channels still open as tabs. Back closes what opened last and
+  Forward opens it again; ✕ or Escape closes it for good. Leaving the channel
+  leaves it behind, and Back brings it back. Reloading Buzz restores it.
 - **Details messages**: a long message an agent sends for people shows its
   first paragraph, its brief, in the conversation. **Show more** reads all of
   it over the message box of the view it is in: the conversation, an inline

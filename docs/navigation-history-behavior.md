@@ -3,7 +3,7 @@
 Dialogs and content tabs follow the [navigation history and dismissal contract](navigation-history.md).
 The integrated families are Members, Settings sections, provider controls opened
 within Settings or through Agents-page links, agent config version inspectors,
-the community join dialog, inline threads and details readers, and thread,
+the community join dialog, inline threads and the layers over a view, and thread,
 Profile and GitHub tabs.
 
 Plugin account-action dialogs in the profile menu are a documented exception.
@@ -66,29 +66,62 @@ visit beneath the new destination.
 
 An inline thread is a dialog on its conversation's visit: `inline` names its
 root in the conversation address, so a conversation has at most one, and a new
-one replaces it. The **Open threads in** setting (Inline) only decides that
-opening a thread from the timeline writes `inline` rather than opening a tab;
-after that the address alone says what is open. Back closes it and stays in
-the channel; Forward restores it. ✕, Escape and the scrim retire every visit
-naming it, with the details read over it. Move to side panel is a handoff: it
-retires those visits and replaces the current one with the thread's tab, so
-Back never shows the thread inline beside its tab. A thread that has a tab
-opens there instead, and an address that names a thread with a tab shows only
-the tab. Links, Solo threads and read-only channels open tabs as before.
-Leaving the channel leaves the dialog in its visit, which Back restores.
+one replaces it. The **Open threads in** setting (Inline) only decides which
+field an opening writes; after that the address alone says what is open. One
+function, `placeOpening` (`src/bundled/channels/placement.ts`), makes that
+decision for threads, link panels, profiles, thread links and Solo chat links.
+Back closes an inline thread and stays in the channel; Forward restores it. ✕,
+Escape and the scrim retire every visit naming it, with a layer read over it.
+Move to side panel is a handoff: it retires those visits and replaces the
+current one with the thread's tab, so Back never shows the thread inline beside
+its tab. A thread that has a tab opens there instead, and an address that
+names a thread with a tab shows only the tab. Solo threads, threads opened from
+a thread tab, links to threads in other channels and read-only channels open
+tabs as before. Leaving the channel leaves the dialog in its visit, which Back
+restores.
 
-A details reader is a dialog on the view it was opened in, addressed as
-`details` (`{ messageId, rootId?, channelId? }`, the shape of `detail`): with no
-`rootId`, the conversation; with the inline thread's root, a nested layer over
-it; otherwise the thread tab with that root, in `channelId` when that tab
-belongs to another channel. Each address names at most one. Over an inline
-thread, Back closes the details first and then the thread, Forward restores
-them in turn, and closing the thread retires both, as Settings' nested provider
-visits do. ✕, Escape, the scrim and a send from that view's composer retire its
-visits. Reload restores both from the address; the reader appears once its
-message's row is loaded, and a hidden tab's reader waits for the tab. Pages
-without a conversation address (Inbox, Sessions, saved drafts) open details as
-a local dialog with no visit.
+Every view (the conversation, its inline thread, a thread tab) can have one
+layer on top: a details message, or under Inline a panel opened from one of
+its messages, such as a profile from an avatar or name, a pull request, a diff
+or a plugin's link panel. The address has one `layer` field
+(`{ messageId | target, threadId?, rootId?, channelId? }`): `messageId` is a
+details message, `target` a panel opened from a message in `threadId`'s thread.
+With no `rootId` the layer is the conversation's; with the inline thread's root
+it is a nested layer over that thread; otherwise it belongs to the thread tab
+with that root, in `channelId` when that tab belongs to another channel.
+Opening another layer, from any view, replaces it with a visit of its own, and
+so does a panel's own `open` or `push` inside it: Back walks thread → profile →
+pull request in order, and reload restores what the address names. Over an
+inline thread, Back closes the layer first and then the thread, as Settings'
+nested provider visits do. ✕, Escape and the scrim retire the layer's visits; a
+send from that view's composer does so for details. Open as tab on a panel
+layer retires its visits and opens its tab, as Move to side panel does for a
+thread; the composer underneath keeps its text. An opening that already has a
+tab focuses that tab, so nothing is inline and in a tab at once. A details
+reader appears once its message's row is loaded, and a hidden tab's layer waits
+for the tab. A panel draws as a full-height sheet over the view's composer, or
+as a centered dialog when that composer is not on screen; details fit their
+content. Pages without a conversation address (Inbox, Sessions, saved drafts)
+open details as a local dialog with no visit, and their panels as before.
+
+### What Inline still opens as a tab
+
+Inline means the viewer opts out of tab management, so the goal is that
+everything opened from a view opens on it. A panel registration opts out with
+`inline: false`; these still open as tabs, and are the follow-up list for full
+coverage:
+
+- **Huddles**, **Canvas** and **BuilderLab apps**: each holds a live lifetime
+  (a call, an editor, a running app). A dialog unmounts on Back and ✕, which
+  would end it. Each moves inline by dropping its declaration once that
+  lifetime survives the dialog closing, with no change to the page.
+- **Terminal**: a bottom drawer launched from the channel header, not an
+  opening from a view; Inline does not touch it.
+- Links from outside a message row (Members, the channel header, an agent's
+  request to show something) and thread or conversation links that a panel
+  opens through navigation keep their current routing.
+
+Media keeps its own viewer under every setting.
 
 Settings Close retires its known section visits for the same account/community
 scope and returns to the covered workspace. A visit that names no community, as
