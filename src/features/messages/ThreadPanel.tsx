@@ -18,6 +18,7 @@ import {
 import { activityRuns, relayedRuns } from "./activity-groups";
 import { RelayedRunPreview } from "./RelayedRunPreview";
 import { DayDivider } from "./MessageTimestamp";
+import { MessageLoading } from "./MessageLoading";
 import { workflowLabel } from "../relay/workflow-attribution";
 import { usePanelTabHost } from "../panels/PanelWorkspace";
 import { moveMessageSelection } from "./message-selection";
@@ -442,7 +443,7 @@ function RetainedThreadPanel(props: ThreadPanelProps) {
           }
         />
       ) : (
-        !error && <ThreadLoading />
+        !error && <MessageLoading label="Loading thread…" />
       )}
     </>
   );
@@ -567,7 +568,7 @@ function OwnedThreadPanel({
       canOpenLink={canOpenLink}
     />
   ) : (
-    <ThreadLoading />
+    <MessageLoading label="Loading thread…" />
   );
 }
 function ThreadMessages({
@@ -2466,7 +2467,7 @@ function ThreadMessages({
               </p>
             )}
           {positioning || (snapshot.status === "loading" && !rows.length) ? (
-            <ThreadLoading />
+            <MessageLoading label="Loading thread…" />
           ) : null}
           {selectionNotice && (
             <p role="alert">
@@ -2647,19 +2648,4 @@ function shownAnchor(anchor: { element: HTMLElement; top: number }) {
   return !height || anchor.top + height > 0
     ? anchor
     : { element: anchor.element, top: 0 };
-}
-
-function ThreadLoading() {
-  return (
-    <div className={styles.threadLoading} role="status">
-      <picture>
-        <source
-          media="(prefers-reduced-motion: reduce)"
-          srcSet="/buzz-mark.svg"
-        />
-        <img src="/buzz-loading-mark.svg" alt="" width="498" height="341" />
-      </picture>
-      <span className="sr-only">Loading thread…</span>
-    </div>
-  );
 }
