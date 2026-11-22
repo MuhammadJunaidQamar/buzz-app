@@ -161,9 +161,8 @@ viewport):
   with no divider. A verified window followed the live stream since its head
   read, so the read a revisit past the head's freshness lease starts holds
   nothing. All of this happens before the visit's first screen shows (see
-  [channels](channels.md)), so the divider is on that screen or never: after
-  500 ms the screen shows and the visit settles with no divider. Reading waits
-  for the screen. A batch that filled its limit can still stop
+  [channels](channels.md)), so the divider is on that screen or never. Reading
+  waits for the screen. A batch that filled its limit can still stop
   short of the true oldest unread message. `prefixRead` rules that out for
   ordinary rows, but not for mentions, broadcasts, broadcast replies or messages
   marked unread, which catch-up's `activity:` mark never reads: a short sample

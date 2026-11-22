@@ -890,7 +890,7 @@ appTest.describe("a head read that outlasts the reading dwell", () => {
   };
 
   appTest(
-    "marks new messages when the revisit head read is slow",
+    "marks new messages at once when the revisit head read is slow",
     async ({ page, app }) => {
       // Installed before the app loads, so every timer is the page clock's.
       await page.clock.install();
@@ -912,17 +912,24 @@ appTest.describe("a head read that outlasts the reading dwell", () => {
         await go(page, "Beta");
         await head.reading;
         await page.clock.setSystemTime(Date.now());
-        await expectHeld(page, arrivals, {
-          status: "ready",
-          freshness: "verified",
-          refreshing: true,
-          rows: 18,
-        });
+        // The window followed the stream since its last head read, so the
+        // re-read cannot move the line: the first screen draws it, and the
+        // channel reads itself as usual, while the read is still held.
+        await expect
+          .poll(() => pageOf(page, "beta"))
+          .toEqual({
+            status: "ready",
+            freshness: "verified",
+            refreshing: true,
+            rows: 18,
+          });
+        await expectBoundaryAt(page, arrivals);
+        await page.clock.runFor(1_000);
+        await expectRead(page, arrivals);
+        expect(await pageOf(page, "beta")).toMatchObject({ refreshing: true });
       } finally {
         head.release();
       }
-      await expectBoundaryAt(page, arrivals);
-      await expectRead(page, arrivals);
     },
   );
 

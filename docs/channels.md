@@ -1360,10 +1360,9 @@ The port retains the prepared-store implementation and its behavior tests:
   [unread](unread.md)) and every name on the rows is known (a profile, or a
   completed read that found none). A screen complete at mount shows at once; one
   completed later waits a frame so the virtualizer measures rows that changed
-  while hidden. After 500 ms the screen shows what it has, with fallback names,
-  and the visit settles with no line, so the line never arrives late. After
-  that, only data that arrived after the open changes the screen: live rows,
-  later names, and the away-and-return line. A settling visit (a cached channel
+  while hidden. The screen waits for both, with no timer. After that, only data
+  that arrived after the open changes the screen: live rows, later names, and
+  the away-and-return line. A settling visit (a cached channel
   list that verification turns into an active visit) is the same opening. Reading
   waits for the screen to show.
 

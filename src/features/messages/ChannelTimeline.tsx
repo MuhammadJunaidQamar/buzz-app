@@ -149,7 +149,6 @@ type Opening = {
   token: object;
   settling: boolean;
   shown: boolean;
-  expired: boolean;
 };
 /** What the reader had in front of them when the window lost attention. */
 type AwayBaseline = {
@@ -169,8 +168,6 @@ function subscribeDocumentActive(listener: () => void) {
   };
 }
 const TIMELINE_PLACE = "timeline";
-// How long a visit's first screen may wait for its line and names.
-const FIRST_SCREEN_WAIT_MS = 500;
 const noUnnamed: ReadonlySet<string> = new Set();
 const unnamedProfiles =
   (profiles: RelaySession["profiles"]) => (): ReadonlySet<string> =>
@@ -795,10 +792,8 @@ function Timeline({
       : undefined;
   // A visit's first screen is final. The timeline mounts, measures and
   // positions its rows hidden, and shows them once the screen is complete:
-  // the line is decided and every name on the rows is known. If that takes
-  // longer than FIRST_SCREEN_WAIT_MS it shows what it has, with no line and
-  // fallback names, and the line is decided as none. After that only data
-  // that arrives later changes the screen.
+  // the line is decided and every name on the rows is known. After that only
+  // data that arrives later changes the screen.
   const unnamed = useSyncExternalStore(
     queries.profiles.subscribe,
     unnamedProfiles(queries.profiles),
@@ -812,7 +807,6 @@ function Timeline({
     token: visitToken,
     settling,
     shown: !!retainedVisit?.boundary.captured,
-    expired: false,
   }));
   let current = opening;
   if (opening.token !== visitToken || opening.settling !== settling) {
@@ -824,23 +818,11 @@ function Timeline({
             token: visitToken,
             settling,
             shown: !!retainedVisit?.boundary.captured,
-            expired: false,
           };
     setOpening(current);
   }
   const firstScreenShown = current.shown;
   const { epoch } = current;
-  useEffect(() => {
-    if (firstScreenShown) return;
-    const timer = setTimeout(
-      () =>
-        setOpening((opening) =>
-          opening.epoch === epoch ? { ...opening, expired: true } : opening,
-        ),
-      FIRST_SCREEN_WAIT_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [firstScreenShown, epoch]);
   const laidOut = useRef<object>(undefined);
   useLayoutEffect(() => {
     laidOut.current = epoch;
@@ -855,7 +837,7 @@ function Timeline({
     const namesKnown = window.rows.every((row) =>
       rowProfileIds(row).every((id) => profiles.has(id) || unnamed.has(id)),
     );
-    complete = current.expired || (lineDecided && namesKnown);
+    complete = lineDecided && namesKnown;
     // Complete before its first commit, the screen is laid out as it shows.
     // Completed later, it waits a frame for the virtualizer to measure the
     // rows that changed while it was hidden.
