@@ -360,7 +360,6 @@ function PluginDetails({
   openUpdateSettings = false,
   sections,
   openSection,
-  unmet,
 }: {
   plugin: PluginInfo;
   managed?: ReturnType<typeof managedBy>;
@@ -383,16 +382,10 @@ function PluginDetails({
   openUpdateSettings?: boolean;
   sections: readonly SettingsSection[];
   openSection: ((section: string) => void) | undefined;
-  /** What the plugin needs and this device lacks, such as a decisions
-   * provider; it does not run until then. */
-  unmet?: string | undefined;
 }) {
   const accessReason = restrictedPlugin(plugin)
     ? accessMessage(plugin, access)
     : null;
-  // Turned off, it can't be turned on until it can run.
-  const toggleReason =
-    accessReason ?? (plugin.enabled ? null : (unmet ?? null));
   const [installedStatus, setInstalledStatus] =
     useState<HTMLSpanElement | null>(null);
   const toggle = useRef<HTMLButtonElement>(null);
@@ -479,9 +472,6 @@ function PluginDetails({
             {access === "checking" ? "Checking…" : "Unavailable"}
           </span>
         )}
-        {plugin.enabled && !accessReason && unmet && (
-          <span className="text-caption text-muted">{unmet}</span>
-        )}
         <div className={styles.pluginPrimaryActions}>
           <div className={styles.pluginPrimaryAction}>
             {/* Channels is required and has no enable/disable control. */}
@@ -492,33 +482,30 @@ function PluginDetails({
             ) : (
               <Tooltip
                 content={
-                  accessReason && access === "error"
+                  access === "error"
                     ? "Could not check access. Try again."
-                    : toggleReason
+                    : accessReason
                 }
-                {...(toggleReason ? {} : { open: false })}
+                {...(accessReason ? {} : { open: false })}
                 disableHoverablePopup
               >
                 <Button
                   variant={
                     plugin.enabled
                       ? "subtle"
-                      : toggleReason
+                      : accessReason
                         ? "outline"
                         : "prominent"
                   }
                   size="sm"
-                  disabled={
-                    pluginToggleDisabled(plugin, access, busy) ||
-                    (!plugin.enabled && !!unmet)
-                  }
+                  disabled={pluginToggleDisabled(plugin, access, busy)}
                   loading={
                     !plugin.enabled &&
                     restrictedPlugin(plugin) &&
                     access === "checking"
                   }
                   aria-describedby={
-                    toggleReason ? "plugin-detail-access" : undefined
+                    accessReason ? "plugin-detail-access" : undefined
                   }
                   focusableWhenDisabled
                   ref={toggle}
@@ -612,11 +599,11 @@ function PluginDetails({
           ))}
         </p>
       )}
-      {toggleReason && (
+      {accessReason && (
         <p id="plugin-detail-access" className="sr-only">
-          {accessReason && access === "error"
+          {access === "error"
             ? "Could not check access. Try again."
-            : toggleReason}
+            : accessReason}
         </p>
       )}
       {readme && (
@@ -936,7 +923,7 @@ export function Settings({
     if (requestedSection === selected)
       navigation?.complete({ status: "opened" });
   }, [navigation, requestedSection, selected]);
-  const { configuration, activation, busy, error, refreshError, unmet } =
+  const { configuration, activation, busy, error, refreshError } =
     useSyncExternalStore(plugins.subscribe, plugins.snapshot);
   const ready = configuration.status === "ready" ? configuration : undefined;
   const catalog = ready?.catalog;
@@ -964,8 +951,7 @@ export function Settings({
       busy ||
       (!plugin.enabled &&
         restrictedPlugin(plugin) &&
-        adminAccess?.status(plugin.manifest.id) !== "allowed") ||
-      (!plugin.enabled && unmet?.[plugin.manifest.id])
+        adminAccess?.status(plugin.manifest.id) !== "allowed")
     )
       return;
     setActivationAttempt(
@@ -1930,7 +1916,6 @@ export function Settings({
           onCheckAccess={() => adminAccess?.retry(selectedPlugin.manifest.id)}
           plugins={plugins}
           onToggle={() => togglePlugin(selectedPlugin)}
-          unmet={unmet?.[selectedPlugin.manifest.id]}
           close={detailsClose}
           onClose={closePluginDetails}
           sections={selectedSections}

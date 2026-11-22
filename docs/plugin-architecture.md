@@ -250,24 +250,6 @@ Browser installation is not supported; the browser shows a desktop-only explanat
 An organization can recommend plugin sources through a policy file next to the profile
 folders; see [managed plugin sources](managed-plugins.md).
 
-## Plugin requirements
-
-A plugin that cannot work without something the device may lack declares it in
-`manifest.json`:
-
-```json
-"requires": ["decisions"]
-```
-
-`decisions` needs a decisions provider: `ctx.decisions.status()` other than
-`unavailable`. A provider that is still `checking`, `unconfirmed` or
-`needs-setup` counts, so the plugin handles a decision that fails. Until the
-device has what a plugin requires, Buzz does not start it, and Settings shows
-why, with its Turn on button disabled. The owner's on/off choice is kept: an
-enabled plugin starts when a provider is registered and stops when the last one
-goes. Older apps refuse a manifest with `requires`, so declare it only when the
-plugin needs it.
-
 ## Git plugin updates
 
 A plugin declares support in its installed `manifest.json`:
@@ -3875,6 +3857,32 @@ questions or `usage`: the provider the owner chose answers. A failure is a tool
 error that names the reason and what the owner can do about it. Agents on a
 device have at most 4 calls in flight at once, so Attention's classifier keeps
 most of the native client's 16 slots.
+
+### Plugins that need decisions
+
+A plugin that does nothing useful without answers, such as one that routes
+messages with them, registers its contributions inside
+`ctx.inject(["decisionsAnswerable"], (scope) => …)`. The decisions service
+provides `decisionsAnswerable` (`{ version: 1 }`) while decisions can be
+answered on this device and withdraws it while they can't, so Cordis adds the
+contributions and removes them again as that changes. The plugin stays on, and
+until then does nothing.
+
+```ts
+export const inject = ["decisions", "agents"];
+export function apply(ctx: Context) {
+  ctx.inject(["decisionsAnswerable"], (scope) => {
+    scope.agents.registerMentionPlacement({ id: "where", place });
+  });
+}
+```
+
+Today "can be answered" means at least one provider is registered, whatever its
+status: one still `checking`, `unconfirmed` or `needs-setup` counts, so a flaky
+sign-in does not flap it. Later it may also be withdrawn for other reasons, so
+treat it as "worth asking", not as "a provider is registered", and handle a
+decision that fails while it is present. Never put it in the module's top-level
+`inject`: on a device without a provider the plugin would fail its startup.
 
 ### Decision providers
 
