@@ -41,4 +41,6 @@ where it was said.
   **More messages** for the next page. Hits from joined channels join the
   local index when you close Finder. Public previews stay out.
 - ⌘⇧P doesn't open Finder while you type in a text field: there it's Spoiler.
+- Other plugins can open Finder on their own lists, such as panes or commands,
+  and on its built-in conversations and people lists. See `docs/finder.md`.
 - Change the shortcuts in **Settings → Shortcuts**.

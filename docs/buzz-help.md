@@ -1235,7 +1235,7 @@ Quitting Buzz also turns it off.
   more. All of Buzz shows matches from this device first, then the rest of
   Buzz below them after a pause in typing. Its index stays in memory on this
   device and is rebuilt each launch. While typing in a text field, ⌘⇧P stays
-  Spoiler.
+  Spoiler. Other plugins can open Finder on their own lists.
 - **Changesets** is an optional desktop plugin, off by default. When a local
   agent finishes a turn in a chat with project folders, a card under its last
   message lists the files it changed, with added and removed lines. Only you

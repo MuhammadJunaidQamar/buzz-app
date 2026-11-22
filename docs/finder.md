@@ -23,6 +23,7 @@ The finder is off by default. Enable it in Settings → Plugins.
 | Filling the index from your account (`sync.ts`) | Done; channel paging has tests |
 | This channel | Done, with older history read as needed |
 | All of Buzz | Done: this device at once, then the relay after a typing pause |
+| Lists from other plugins (`ctx.finder`) | Done, with built-in conversations and people lists |
 | Reading ahead in the channels you use most | Done, with tests and a model of how much it finds |
 | Saving the index between launches | Not started: it is rebuilt each launch |
 | Clear cache empties the index at once | Not yet: it empties on the next reconnect or restart |
@@ -60,6 +61,52 @@ Settings → Shortcuts.
 Older channel messages stay in the index for this session. Relay hits from
 joined channels join it when you close Finder. Public previews stay out; their
 access is checked on each read.
+
+## Plugin sources
+
+Finder is also a picker other plugins can use, the way Telescope is for
+Neovim plugins. A plugin can open Finder on any list, or add lists of its own.
+Finder draws the window, ranks the rows, shows previews and handles the keys,
+so every list looks and works the same.
+
+Finder provides `ctx.finder` while it's on. Take it with `ctx.inject`, so your
+plugin still starts when Finder is off:
+
+```js
+export function apply(ctx) {
+  ctx.inject(["finder"], (child) => {
+    // A list of your own. Its key is "your.plugin/panes".
+    child.finder.registerSource({
+      id: "panes",
+      title: "Panes",
+      items: () => [
+        { id: "sidebar", label: "Sidebar", run: () => focusSidebar() },
+        { id: "thread", label: "Thread", keywords: "replies", run: () => focusThread() },
+      ],
+    });
+    // Open Finder on a list.
+    child.finder.open("buzz.finder/people");
+  });
+}
+```
+
+- `open(source)` opens Finder with an empty field. Without a source, or with
+  one it doesn't know, Finder opens as ⌘P does.
+- Built-in lists: `buzz.finder/channel` (This channel), `buzz.finder/all` (All
+  of Buzz), `buzz.finder/conversations` (channels and DMs you've joined; Enter
+  opens one) and `buzz.finder/people` (everyone in them, by name, handle or
+  NIP-05; Enter opens your DM with them, or their profile).
+- `registerSource(source)` returns a function that removes the list. It also
+  goes when your plugin stops; if it was open, Finder shows All of Buzz.
+- A list gives every row with `items()`. Finder ranks them with its fuzzy
+  matcher over `label` and `keywords`, and reads them again for each text and
+  as messages and names arrive.
+- Each row has an `id`, unique within the list, a `label`, and `run()`, which
+  runs after Finder closes. It can add a `detail` line, `keywords`, an `icon`,
+  an `avatar` (`{ src }`; without `src`, the label's initials), and a
+  `preview`: `{ kind: "channel", channelId }` or `{ kind: "person", pubkey }`.
+- A list that throws shows "This list couldn't load." instead of breaking
+  Finder.
 
 ## How to search
 
@@ -229,4 +276,6 @@ for `quartz` to find notes among 3,000 signed messages; only the newest 300
 start in the index. Try a word with no matches to reach the end. Use
 `?channel=c0&history=6000` with a word that has no matches to reach the
 5,000-message cap and try **Keep going**. Choose **All of Buzz** in the switch,
-or press ⌘⇧P, to see device matches with relay hits below them.
+or press ⌘⇧P, to see device matches with relay hits below them. Add
+`?source=fruit` to open a sample plugin list, or
+`?source=conversations` or `?source=people` for the built-in lists.
