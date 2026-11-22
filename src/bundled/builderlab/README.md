@@ -244,8 +244,7 @@ agents are not migrated into this type.
   destination's latest queued join or leave one at a time, retrying failures
   as sent. A list this client cannot read halts sync until the next sign-in,
   as does a 404 on any route (not yet deployed); a listed address the device
-  could never save is dropped and counted, never a halt. See
-  [communities](../../../docs/communities.md#known-communities).
+  could never save is dropped and counted, never a halt.
 
 The plugin's server is the build's Builderlab: its first
 [sign-in server](../../../docs/configuration.md#federated-identity-build-input),

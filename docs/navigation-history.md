@@ -128,6 +128,4 @@ built-app journeys for actual history events and focus behavior.
 
 Changing this contract requires an explicit product decision, an update here,
 and corresponding regression coverage in the same change. Do not alter the
-policy as a side effect of visual work or a history refactor. The
-[implemented behavior](navigation-history-behavior.md) describes the integrated
-families and their limits, not automatic conformance of every existing dialog or tab.
+policy as a side effect of visual work or a history refactor.

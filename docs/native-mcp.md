@@ -22,7 +22,7 @@ community as yourself:
 - Writes such as messages, reactions and joins publish as the signed-in key.
   Tell the agent where it may write, such as a scratch channel. A join also adds
   the community to the account's list, which syncs to your other devices and
-  is not removed by sync ([known communities](communities.md#known-communities)).
+  is not removed by sync.
 - Do not let an agent sign out. Sign out deletes the shared debug identity for
   every debug build and removes saved organization sign-ins for every profile.
 - A person completes any organization sign-in in the browser. The bridge never

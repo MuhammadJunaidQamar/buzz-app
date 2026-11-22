@@ -152,8 +152,8 @@ const MIXER_ALLOWED = new Map([
 /** Specific `path:line` escapes, each with a reason. */
 const OVERRIDES = new Map([
   // Preserve the existing, designer-approved availability capsule when moving
-  // its recipe out of feature CSS. These are not new contrast exemptions:
-  // docs/presence.md records the measured Online shortfall in both themes.
+  // its recipe out of feature CSS. These are not new contrast exemptions: the
+  // Online label is a known, accepted shortfall (see the token registry).
   ["styles/materials.css:197", "Availability resting status mix: 12%."],
   ["styles/materials.css:202", "Availability hover status mix: 18%."],
   ["styles/materials.css:207", "Availability pressed/open status mix: 24%."],

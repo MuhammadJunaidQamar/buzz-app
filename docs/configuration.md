@@ -535,7 +535,7 @@ redistribute to change a packaged value.
 
 After Builderlab sign-in, the first-launch flow reads four things about the
 account from kgoose: the Nostr key bound to it, the communities it owns, the
-destinations saved to it ([known communities](communities.md#known-communities))
+destinations saved to it
 and the keys it holds a backup of, binds a key it creates or
 imports to an unlinked account, and, on Start over, unlinks the lost key
 before binding the new one. A developer's real account is bound to their real key and that binding
