@@ -33,7 +33,7 @@ changes start a fresh session, as does a missing saved thread. Bindings persist
 locally per community and agent. Switching communities does not stop work;
 removing an agent, leaving its community or disabling the plugin does.
 
-To inspect a conversation, see [View a Codex session](../../../docs/view-codex-session.md).
+To inspect a conversation, see [Inspect an agent session](../../../docs/session-debugging.md).
 
 ## Huddle voice
 

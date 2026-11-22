@@ -38,12 +38,15 @@ Never use `git stash`; worktrees share one stash list.
   so keep it short.
 - **UI.** Read the [design guide](src/shared/design-system/DESIGN.md) before
   any UI change. Use shared components, tokens and Tabler icons from
-  `src/shared/design-system/icons`; don't restyle shared controls locally. New
-  dialogs and tabs follow [navigation history](docs/navigation-history.md).
+  `src/shared/design-system/icons`; don't restyle shared controls locally.
 - **Hosts.** Product logic lives once in `src/features/`. The desktop and
   browser hosts own only I/O and secrets.
 - **Relay load.** Every client reconnects at once after a relay restart, so
-  design relay paths for the whole fleet. 
+  design relay paths for the whole fleet.
+- **Agent tools.** The tools in `src/buzz-mcp/` are the reference interface for
+  every Buzz agent, local and remote, so change them deliberately. Prefer many
+  small tools with real schemas to one tool with an action argument, and put
+  guidance that spans tools in the server instructions, not tool descriptions.
 
 ## Tests
 
