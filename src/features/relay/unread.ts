@@ -437,7 +437,6 @@ export function createUnread({
   let closed = false,
     epoch = 0;
   let requested = false;
-  let repairAgain = false;
   let freshness: UnreadSnapshot["freshness"] = "unknown";
   /** A repair failed, the evidence overflowed or the stream dropped, and no
    * repair has completed since. Live traffic marks evidence observed again
@@ -445,6 +444,9 @@ export function createUnread({
   let owing = false;
   let error: string | undefined;
   let refresh: Promise<void> | undefined;
+  /** Whether the running repair still answers for the current access epoch
+   * and evidence. One the epoch or a reset abandoned holds no later repair back. */
+  let refreshCurrent = () => false;
   const lifetime = new AbortController();
   const events = new Map<string, RelayEvent>();
   // Per repair batch (its channel IDs): the newest created_at a complete read of
@@ -1372,12 +1374,10 @@ export function createUnread({
       ...(evidence && target.kind === "channel" && sampled
         ? { sampled: true as const }
         : {}),
-      // `repairAgain` spans a restart's gap: the settling repair publishes
-      // before the next one begins.
       ...(evidence &&
       target.kind === "channel" &&
       !sampled &&
-      (!requested || refresh || repairAgain)
+      (!requested || refresh)
         ? { sampling: true as const }
         : {}),
       observedCount: evidence ? count : null,
@@ -2256,16 +2256,13 @@ export function createUnread({
       // An initial observation made against a display-only roster still owes
       // evidence when membership becomes fresh, including during an active repair.
       // A newly accessible channel has no evidence yet, and the epoch bump
-      // abandons any in-flight observation, so both also observe again.
+      // abandons any in-flight observation, so both observe again at once.
       // Until that repair finishes, the channels it adds hold only what their
       // windows and live traffic delivered; purge() publishes that.
       const observe = requested && (confirmed || gained || !!refresh);
       if (observe) sampled = false;
       purge();
-      if (observe) {
-        repairAgain = true;
-        if (!refresh) void repair();
-      }
+      if (observe) void repair();
     }
   });
   // Conversation membership for unread replies whose parent conversation is
@@ -2563,13 +2560,13 @@ export function createUnread({
   async function repair(priority: Priority = "foreground") {
     requested = true;
     if (closed) return;
-    if (refresh) return refresh;
-    repairAgain = false;
+    if (refresh && refreshCurrent()) return refresh;
     inboxLoading = true;
     const generation = epoch;
     const reset = resets;
     const current = () => !closed && generation === epoch && reset === resets;
-    refresh = (async () => {
+    refreshCurrent = current;
+    const task: Promise<void> = (async () => {
       const ensured = reads.ensure();
       const ids = channels
         .list()
@@ -2686,13 +2683,14 @@ export function createUnread({
         publish();
       }
     })().finally(() => {
+      if (refresh !== task) return;
       refresh = undefined;
       inboxLoading = false;
       publish();
-      if (!closed && repairAgain) void repair();
     });
+    refresh = task;
     publish();
-    return refresh;
+    return task;
   }
   // Marked messages already asked for this session, found or not.
   const askedHomes = new Set<string>();
@@ -4130,9 +4128,7 @@ export function createUnread({
       channelReadGenerations.clear();
       resetLookups();
       // Every channel loses its evidence, so a session that observes unread
-      // observes again, as for a newly accessible channel: now, or once the
-      // repair the epoch bump abandons settles.
-      repairAgain = requested;
+      // observes again at once, as for a newly accessible channel.
       indexed = false;
       events.clear();
       forget();
@@ -4149,7 +4145,7 @@ export function createUnread({
       freshness = "unknown";
       error = undefined;
       publish();
-      if (requested && !refresh) void repair();
+      if (requested) void repair();
     },
     dispose() {
       closed = true;

@@ -1341,6 +1341,37 @@ it.each(["clear", "dispose", "revoke"])(
   },
 );
 
+it("an access change during a repair that waits on markers reads the new channels at once", async () => {
+  const h = setup();
+  const release = h.holdMarker();
+  try {
+    const repair = h.session.unread.ensure();
+    await vi.waitFor(() =>
+      expect(h.trace.map(({ kind }) => kind)).toEqual([9, 30078]),
+    );
+    h.receive([
+      roster(h.relay, "joined", [h.viewer.pubkey], 20),
+      metadata(h.relay, "joined", "joined", 20),
+    ]);
+    // The epoch bump abandons the waiting repair; the one the change owes
+    // does not wait for it to settle.
+    await vi.waitFor(() =>
+      expect(
+        h.query.mock.calls
+          .map(([filters]) => filters[0])
+          .filter((filter) => filter?.kinds?.includes(9))
+          .map((filter) => filter?.["#h"]),
+      ).toEqual([["other"], ["joined", "other"]]),
+    );
+    release();
+    await repair;
+    await h.session.unread.ensure();
+    expect(h.snapshot()).toMatchObject({ observedCount: 1, sampled: true });
+  } finally {
+    release();
+  }
+});
+
 it("a subscriber clearing cache during progressive publication stops later chunks", async () => {
   const h = setup(129);
   let cleared: Promise<void> | undefined;
