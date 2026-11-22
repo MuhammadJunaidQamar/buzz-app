@@ -1345,20 +1345,39 @@ throws when this copy does not run the agent or its queue is full. Claude, Codex
 
 `ctx.agents.registerMentionPlacement({ id, place })` lets one plugin decide
 where the owner's top-level mentions of local agents are answered. Before the
-harness starts the turn, Buzz calls `place({ agent, channel, event }, signal)`
-and waits at most 3 seconds. It resolves `{ topLevel: true }` or `{ root }`
-(another message's 64-hex id, such as an earlier one the mention follows up on),
-optionally with `note`: private text added to that turn. The harness then
-answers there exactly as for a wake with that `topLevel` or `root`: the turn's
-conversation, its prompt and the default of a `send` without `reply` all follow
-it. A timeout, a throw, `undefined` or a malformed place keeps today's place, a
-thread on the message. A mention inside a thread is never asked about, and when
-two plugins register, neither decides. Every harness (Goose, Claude Code, Codex,
-Pi and the harness kit) takes a placed mention through one helper,
-`deliveryPlace` in `agent-harness/plugin-wake.ts`, which also places wakes, so
-the turn has the matching wake's session, context block and default `send`
-target. The note is only extra text on that turn. Feature-detect the
-method. Attention delivery uses a separate internal `attention` trigger in the Interest lane, accepted by all four harnesses. Its Interest instructions retain their instruction framing, while observed messages remain data. A channel-only Attention address supplies a default posting destination and allows explicit thread replies outside Solo chats.
+turn starts, Buzz calls `place({ agent, channel, event }, signal)` and waits at
+most 1 second. It resolves `{ topLevel: true }` or `{ root }` (another
+message's 64-hex id, such as an earlier one the mention follows up on),
+optionally with `note`: private text added to that turn. A timeout, a throw,
+`undefined` or a malformed place keeps today's place, a thread on the message.
+A mention inside a thread is never asked about, and when two plugins register,
+neither decides. Feature-detect the method.
+
+`ctx.agents.deliverMention(agent, event, { note })` delivers one of the owner's
+own signed messages to a local agent as if the owner had tagged it there.
+Nothing is edited or published; from then on it is an ordinary mention, so the
+placement hook is asked about it, and the agent sees the owner's request, not
+a plugin's data (a wake keeps that framing). It resolves
+`{ status: "delivered" }`, or `{ status: "dropped", reason }`: `tagged` when the
+message already tags the agent, `delivered` when it already reached it,
+`not-owner` for anyone else's or an unsigned message, `unavailable` for an
+agent this copy does not run, and `busy` when its queue is full. Only an
+enabled plugin can call it. Feature-detect the method.
+
+**Where a turn lives is decided once, by the host.** For every mention, placed
+mention and wake, the runner works out the turn's place (`Delivery.place`: its
+channel, with `{ topLevel: true }` or `{ root }`) by one rule, `placeOf` in
+`agent-harness/plugin-wake.ts`: a Solo chat's turns are at its top level, a
+mention goes where a plugin placed it or else to its thread (a thread on it at
+the top level), and a wake where it says. Harnesses take their session key,
+prompt context and the Buzz tools' default `send` target from it with `turnOf`,
+which also gives the event to route by. An agent type built on the harness
+kit gets this with no code of its own. When the host can't tell the channel's
+kind yet, it leaves `place` out and `turnOf` applies the same rule once the
+harness has read it. The framing comes from the trigger: a mention placed at
+the top level gets the mention's top-level text, not a wake's.
+
+Attention delivery uses a separate internal `attention` trigger in the Interest lane, accepted by all four harnesses. Its Interest instructions retain their instruction framing, while observed messages remain data. A channel-only Attention address supplies a default posting destination and allows explicit thread replies outside Solo chats.
 
 An agent type's `run` gets the agent's handle, which publishes, reads and
 uploads as the agent. For agents that act on something other than a message,
