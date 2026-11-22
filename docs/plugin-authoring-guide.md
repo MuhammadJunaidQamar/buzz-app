@@ -317,7 +317,7 @@ Add `"host"` to `inject`, then:
   Check that it exists before use. Channels supplies it through
   `registerWorkspace`, with the same provider lifetime as `ui.Tabs`.
   Set the page's `layout` to `"workspace"`. Pass
-  `{ id, session, scope, target, label, intro?, actions?, detail?, latestRequest? }`.
+  `{ id, session, scope, target, label, intro?, actions?, detail?, latestRequest?, submitTarget?, submitDraftKeys? }`.
   Set `target` to `{ channelId, threadId?, subthreadId?, messageId? }`. Omit
   `threadId` for the channel timeline. Supply a thread ID to show the thread.
   Add `subthreadId` to show and compose within a branch of that thread.
@@ -327,6 +327,21 @@ Add `"host"` to `inject`, then:
   the signal to that opening. Omit it on Back or Forward. An aborted signal is
   ignored, and an explicit `target.messageId` takes precedence.
   `intro` supplies content at the start of history. It scrolls with the messages.
+  `submitTarget: { key, label, placeholder, canSubmit, onSubmit(text), onClose(), onDraftChange(hasText) }`
+  makes the channel composer answer your page instead of sending. The
+  composer shows `label` with a close button that calls `onClose`, and your
+  `placeholder`. Each `key` keeps its own draft, in memory for this Workspace
+  and apart from the channel's draft, which returns when you remove the
+  target. Send is active while `canSubmit` is, with or without text, and calls
+  `onSubmit` with the text. The composer is disabled until the promise
+  settles; then it clears that key's draft if it is unchanged, or shows the
+  rejection's message and keeps the draft. `onDraftChange` hears whether the
+  current key's draft has text. A message edit, and a draft with an
+  attachment, forward or chat card, take precedence: the latter shows "Remove
+  the attachment to answer". A thread target ignores `submitTarget`. Pass the
+  keys whose drafts to keep as `submitDraftKeys`; the composer discards the
+  others. Check `ctx.conversation.workspaceSlots?.submitTarget === true`
+  first: an older host lacks the flag and ignores both props.
   `actions` supplies
   entries in the header's three-dot menu and the tab's context menu, with
   `{ label, run() }`. `detail: { target, rootId? }` initially selects a panel

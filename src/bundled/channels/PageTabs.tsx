@@ -7,6 +7,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import type { RelaySession } from "../../features/relay/session";
+import type { SubmitDrafts } from "../../features/messages/MessageComposer";
 import type {
   ConversationExtensions,
   ConversationWorkspaceProps,
@@ -96,6 +97,8 @@ export function PageTabs({
     session.profiles,
     session.names,
   );
+  // A submit target's drafts last as long as this workspace.
+  const [submitDrafts] = useState<SubmitDrafts>(() => new Map());
   const mounted = useRef(false);
   const continuing = useRef(false);
   useLayoutEffect(() => {
@@ -539,6 +542,13 @@ export function PageTabs({
                             intro={workspace.intro}
                             subthreadId={primaryTarget?.subthreadId}
                             latestRequest={latestRequest}
+                            submitTarget={
+                              workspace.submitTarget && {
+                                ...workspace.submitTarget,
+                                drafts: submitDrafts,
+                                keep: workspace.submitDraftKeys,
+                              }
+                            }
                             active={
                               secondary.selectedMain === "conversation" &&
                               !covered

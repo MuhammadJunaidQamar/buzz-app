@@ -197,3 +197,34 @@ test.describe("thread workspace", () => {
     expect(await gap(region)).toBeGreaterThan(200);
   });
 });
+
+// The page's target reaches the host's real editor through `ui.Workspace`;
+// Enter answers it and publishes nothing, then the channel draft returns.
+test("a page's submit target takes the composer's Enter without sending", async ({
+  page,
+  app,
+}) => {
+  await open(page, app);
+  const region = history(page);
+  await select(page, { channelId: "alpha" });
+  await expectBottom(page, region);
+  const composer = page.getByRole("textbox", {
+    name: "Message #Alpha",
+    exact: true,
+  });
+  await composer.click();
+  await page.keyboard.type("Channel draft");
+  await page.getByRole("button", { name: "Answer in composer" }).click();
+  await expect(page.getByText("Answering the fixture decision")).toBeVisible();
+  await expect(composer).toHaveText("");
+  await composer.click();
+  await page.keyboard.type("Ship it");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("output")).toHaveText("Answered: Ship it");
+  await expect(composer).toHaveText("");
+  await expect(region.getByText("Ship it", { exact: true })).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Close Answering the fixture decision" })
+    .click();
+  await expect(composer).toHaveText("Channel draft");
+});

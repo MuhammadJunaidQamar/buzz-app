@@ -352,6 +352,22 @@ function recoveryFor(session: ComposerSession) {
   return recovery;
 }
 
+/** A workspace's drafts for its submit targets, by key. */
+export type SubmitDrafts = Map<string, MentionDraft>;
+/** A page's target that Send answers instead of sending (`ui.Workspace`'s
+ * `submitTarget`). Its drafts stay apart from the channel's. */
+export type SubmitTarget = {
+  key: string;
+  label: string;
+  placeholder: string;
+  canSubmit: boolean;
+  onSubmit(text: string): Promise<void>;
+  onClose(): void;
+  onDraftChange(hasText: boolean): void;
+  drafts: SubmitDrafts;
+  /** The keys whose drafts to keep; the rest are discarded. */
+  keep?: readonly string[] | undefined;
+};
 export type MessageComposerProps = {
   extensions?: ConversationExtensions | undefined;
   scope: string;
@@ -411,6 +427,8 @@ export type MessageComposerProps = {
   focusRequest?: number;
   hideMediaTimeIndicator?: boolean;
   disabled?: boolean;
+  /** A channel composer answers it while no message edit is open. */
+  submitTarget?: SubmitTarget | undefined;
   /** A new conversation owns persistence and delivery before a channel exists. */
   submission?: {
     draftKey: string;
@@ -601,6 +619,7 @@ function Composer({
   focusRequest,
   hideMediaTimeIndicator = false,
   disabled: requestedDisabled = false,
+  submitTarget,
   submission,
   soloConversation,
   ownSoloConversation = false,
@@ -632,6 +651,21 @@ function Composer({
   const disabled = requestedDisabled || readOnly;
   const [sending, setSending] = useState(false);
   const sendAttempt = useRef<AbortController | null>(null);
+  // The submit target's key whose draft the editor shows, which outlasts a
+  // message edit opened over it, and the channel's draft set aside for it.
+  const target = threadRootId || submission ? undefined : submitTarget;
+  const latestTarget = useRef(target);
+  latestTarget.current = target;
+  const targetDrafts = useRef(target?.drafts);
+  if (target) targetDrafts.current = target.drafts;
+  const [shownKey, setShownKey] = useState<string>();
+  const shownTarget = useRef<string | undefined>(undefined);
+  const beforeTarget = useRef<
+    { value: MentionDraft; restore(): void } | undefined
+  >(undefined);
+  const reportedText = useRef<boolean | undefined>(undefined);
+  const [answering, setAnswering] = useState(false);
+  const answerPending = useRef(false);
   useLayoutEffect(() => () => sendAttempt.current?.abort(), []);
   useLayoutEffect(() => {
     if (disabled || !active) sendAttempt.current?.abort();
@@ -1323,6 +1357,12 @@ function Composer({
     };
   }, [flushDraft, recoveryKey]);
 
+  const reportTargetDraft = (draft: MentionDraft) => {
+    const hasText = !!draft.text.trim();
+    if (reportedText.current === hasText) return;
+    reportedText.current = hasText;
+    latestTarget.current?.onDraftChange(hasText);
+  };
   const saveDraft = (
     next: MentionDraft,
     source: "action" | "editor" | "prefill" = "action",
@@ -1346,6 +1386,11 @@ function Composer({
     valueRef.current = next;
     updateDraft(next);
     if (source === "prefill" || editing.target) return;
+    if (shownTarget.current !== undefined) {
+      targetDrafts.current?.set(shownTarget.current, next);
+      reportTargetDraft(next);
+      return;
+    }
 
     if (submission) {
       // Submission recovery checks the durable prompt before restoring a
@@ -1596,6 +1641,7 @@ function Composer({
     disabled ||
     admitting ||
     sending ||
+    answering ||
     !!accepted ||
     !!submission?.locked ||
     (editing.target && (editing.locked || editDisabled)) ||
@@ -1604,15 +1650,24 @@ function Composer({
     session.typing?.send,
     channelId,
     threadRootId,
-    active && !editingDisabled && !editing.target && !submission && !cached,
+    active &&
+      !editingDisabled &&
+      !editing.target &&
+      !submission &&
+      shownKey === undefined &&
+      !cached,
   );
+  const targeting = !!target && shownKey !== undefined && !editing.target;
   // The editor's placeholder is text, so a channel's own placeholder is drawn
   // over it with its sidebar icon; DMs, threads and edits keep their text.
   const ChannelIcon = useListedChannel(listed, channelId, channelIcon);
   const channelLabel =
     !editing.target && customLabel === undefined && !threadRootId;
   const iconPlaceholder =
-    channelLabel && placeholder === undefined && ChannelIcon !== ChatCircleIcon;
+    channelLabel &&
+    placeholder === undefined &&
+    !targeting &&
+    ChannelIcon !== ChatCircleIcon;
   const label = channelLabel
     ? `Message ${ChannelIcon === LockIcon ? "" : "#"}${channelName}`
     : editing.target
@@ -1829,7 +1884,13 @@ function Composer({
       deletedRevision?: string,
     ) => {
       traceDraft(scope, draftKey, "reconcile", diagnosticEditor);
-      if (submission || editing.target || writing.current) return;
+      if (
+        submission ||
+        editing.target ||
+        shownTarget.current !== undefined ||
+        writing.current
+      )
+        return;
       const currentPurgeToken = viewScopePurgeToken(scope);
       if (currentPurgeToken !== undefined && currentPurgeToken !== purgeToken) {
         setAccepted(undefined);
@@ -1894,6 +1955,9 @@ function Composer({
     },
   );
   const editingDraft = !!editing.target;
+  // The channel's draft is set aside while a message edit or a submit target
+  // shows another one.
+  const asideDraft = editingDraft || shownKey !== undefined;
   const deferredRecovery = useRef<RecoveredSend | undefined>(undefined);
   useEffect(() => {
     if (submission) return;
@@ -1912,17 +1976,18 @@ function Composer({
       deferredRecovery.current?.draft,
       deferredRecovery.current?.picks,
     );
-    if (!editingDraft && deferredRecovery.current) {
+    if (!asideDraft && deferredRecovery.current) {
       takeMissedRecovery(session, recoveryKey);
       setError(errorForRecovery(deferredRecovery.current.preparationError));
       deferredRecovery.current = undefined;
     }
     return stop;
-  }, [scope, submission, editingDraft, session, recoveryKey, draftKey]);
+  }, [scope, submission, asideDraft, session, recoveryKey, draftKey]);
   const receiveRecovery = useEffectEvent((recovered: RecoveredSend) => {
-    if (editing.target) deferredRecovery.current = recovered;
+    const aside = !!editing.target || shownTarget.current !== undefined;
+    if (aside) deferredRecovery.current = recovered;
     reconcileDraft(recovered.draft, recovered.picks);
-    if (!editing.target) {
+    if (!aside) {
       takeMissedRecovery(session, recoveryKey);
       setError(errorForRecovery(recovered.preparationError));
     }
@@ -1942,6 +2007,52 @@ function Composer({
     }
     return stop;
   }, [session, recoveryKey, scope, draftKey]);
+  // The submit target's draft replaces the channel's, which returns when the
+  // target goes away. A message edit, or a send still settling, holds the swap.
+  const keep = target?.keep;
+  const swapTarget = useEffectEvent(() => {
+    const drafts = targetDrafts.current;
+    if (drafts && keep)
+      for (const key of drafts.keys())
+        if (!keep.includes(key)) drafts.delete(key);
+    const key = target?.key;
+    if (editing.target || accepted || !input.current) return;
+    if (key === shownTarget.current) return;
+    if (shownTarget.current === undefined) {
+      flushDraft();
+      beforeTarget.current = {
+        value: valueRef.current,
+        restore: input.current.checkpoint(),
+      };
+    }
+    shownTarget.current = key;
+    setShownKey(key);
+    reportedText.current = undefined;
+    if (key === undefined) {
+      const saved = beforeTarget.current;
+      beforeTarget.current = undefined;
+      if (saved) {
+        valueRef.current = saved.value;
+        updateDraft(saved.value);
+        saved.restore();
+      }
+    } else {
+      const next = drafts?.get(key) ?? mentionDraft("");
+      valueRef.current = next;
+      updateDraft(next);
+      input.current.reset(next);
+      reportTargetDraft(next);
+    }
+    completion.invalidate();
+    setLinkEdit(null);
+    caret.current = undefined;
+    setError(undefined);
+  });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The swap follows the target's key, its kept keys, and what holds it.
+  useLayoutEffect(
+    () => swapTarget(),
+    [target?.key, keep?.join("\n"), editingDraft, !!accepted],
+  );
   function resolveDraft(keep: boolean) {
     cancelDraftSave();
     const current = viewRevision(scope, draftKey);
@@ -2821,7 +2932,13 @@ function Composer({
       seedClosed.current = false;
       return;
     }
-    if (conflict || editing.target || completion.composing.current) return;
+    if (
+      conflict ||
+      editing.target ||
+      shownKey !== undefined ||
+      completion.composing.current
+    )
+      return;
     // Content the user put in, unlike this effect's own prefill, closes the
     // seed until the composer is shown again, even once it is cleared.
     const automatic =
@@ -2889,6 +3006,7 @@ function Composer({
   const untagged =
     needsRecipient &&
     !editing.target &&
+    !targeting &&
     !addressed.length &&
     !value.pending?.length;
   async function prepareRecipients(
@@ -2969,6 +3087,39 @@ function Composer({
     }
     return { recipients, references };
   }
+  // The page's target takes the text in place of a send. Its draft clears
+  // only if it still holds the text it answered with.
+  async function answer(to: SubmitTarget, key: string) {
+    if (
+      answerPending.current ||
+      !to.canSubmit ||
+      answerBlocked ||
+      editingDisabled
+    )
+      return;
+    const text = composerMarkdown(valueRef.current);
+    answerPending.current = true;
+    setAnswering(true);
+    setError(undefined);
+    try {
+      await to.onSubmit(text);
+      const current = to.drafts.get(key);
+      if (current && composerMarkdown(current) !== text) return;
+      to.drafts.delete(key);
+      if (!live.current || shownTarget.current !== key) return;
+      const empty = mentionDraft("");
+      valueRef.current = empty;
+      updateDraft(empty);
+      input.current?.reset(empty);
+      reportTargetDraft(empty);
+    } catch (reason) {
+      if (live.current)
+        setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      answerPending.current = false;
+      if (live.current) setAnswering(false);
+    }
+  }
   async function send(human = false) {
     if (!permitted.current || voice.isCapturing() || forwarded.blocked) return;
     if (editing.target) {
@@ -3001,6 +3152,10 @@ function Composer({
         composerMarkdown(valueRef.current),
         editableRows().find((row) => row.id === editing.target?.id),
       );
+      return;
+    }
+    if (shownTarget.current !== undefined) {
+      if (target) await answer(target, shownTarget.current);
       return;
     }
     if (
@@ -3806,6 +3961,9 @@ function Composer({
   // padding (data-attachments) collapse when it has, not when the list empties.
   // An edit unmounts the section at once, so no exit completes during one.
   const hasAttachments = attachments.items.length > 0 || !!gifs?.length;
+  // The target takes text only, never a send's attachments, forward or cards.
+  const answerBlocked =
+    targeting && (hasAttachments || !!value.forward || !!chatCards?.length);
   const [attachmentsExiting, setAttachmentsExiting] = useState(false);
   const [hadAttachments, setHadAttachments] = useState(hasAttachments);
   if (hadAttachments !== hasAttachments) {
@@ -4093,8 +4251,27 @@ function Composer({
             onDismiss={() => setAttachmentError(undefined)}
           />
         )}
-        <ComposerContext key={editing.target ? "edit" : "reply"}>
-          {editing.target ? (
+        <ComposerContext
+          key={editing.target ? "edit" : targeting ? "target" : "reply"}
+        >
+          {targeting ? (
+            <div className={styles.replyContext}>
+              <div>
+                {target.label}
+                {answerBlocked && <p>Remove the attachment to answer</p>}
+              </div>
+              <IconButton
+                type="button"
+                size="sm"
+                aria-label={`Close ${target.label}`}
+                onClick={() => {
+                  target.onClose();
+                  input.current?.focus();
+                }}
+                icon={<XIcon size={16} aria-hidden="true" />}
+              />
+            </div>
+          ) : editing.target ? (
             <div className={styles.replyContext}>
               <PencilSimpleIcon size={18} aria-hidden="true" />
               <div>Editing message</div>
@@ -4266,7 +4443,9 @@ function Composer({
                   ),
               )}
               aria-label={label}
-              placeholder={placeholder ?? label}
+              placeholder={
+                targeting ? target.placeholder : (placeholder ?? label)
+              }
               onFocus={() => {
                 hasFocused.current = true;
                 completion.observe(true);
@@ -4478,11 +4657,15 @@ function Composer({
               )}
             <IconButton
               variant={
-                draft.trim() ||
-                value.forward ||
-                chatCards?.length ||
-                gifs?.length ||
-                attachments.items.length
+                (
+                  targeting
+                    ? target.canSubmit && !answerBlocked
+                    : draft.trim() ||
+                      value.forward ||
+                      chatCards?.length ||
+                      gifs?.length ||
+                      attachments.items.length
+                )
                   ? "primary"
                   : "ghost"
               }
@@ -4503,39 +4686,48 @@ function Composer({
               title={
                 editing.target
                   ? "Save changes"
-                  : compacting
+                  : compacting && !targeting
                     ? "Wait for compaction to finish, or interrupt it."
                     : untagged
                       ? recipientHint
                       : "Send message"
               }
               focusableWhenDisabled={
-                untagged || (!editing.target && compacting) || undefined
+                untagged ||
+                (!editing.target && !targeting && compacting) ||
+                undefined
               }
               disabled={
-                disabled ||
-                (!editing.target &&
-                  stickyPicks &&
-                  (pickReadPending || pickReadFailed)) ||
-                untagged ||
-                (!editing.target && compacting) ||
-                (!editing.target && (!!accepted || conflict || sendPending)) ||
-                (!!editing.target && (editing.locked || editDisabled)) ||
-                admitting ||
-                sending ||
-                submission?.disabled ||
-                (!editing.target && forwarded.blocked) ||
-                (!editing.target && attachments.blocked) ||
-                (!draft.trim() &&
-                  !value.forward &&
-                  !chatCards?.length &&
-                  ((!!submission && !submission.allowAttachmentOnly) ||
-                    (!attachments.items.length && !gifs?.length)) &&
-                  !(
-                    editing.target &&
-                    requestDeletion &&
-                    session.outbox?.supports(5)
-                  ))
+                targeting
+                  ? disabled ||
+                    !!accepted ||
+                    answering ||
+                    answerBlocked ||
+                    !target.canSubmit
+                  : disabled ||
+                    (!editing.target &&
+                      stickyPicks &&
+                      (pickReadPending || pickReadFailed)) ||
+                    untagged ||
+                    (!editing.target && compacting) ||
+                    (!editing.target &&
+                      (!!accepted || conflict || sendPending)) ||
+                    (!!editing.target && (editing.locked || editDisabled)) ||
+                    admitting ||
+                    sending ||
+                    submission?.disabled ||
+                    (!editing.target && forwarded.blocked) ||
+                    (!editing.target && attachments.blocked) ||
+                    (!draft.trim() &&
+                      !value.forward &&
+                      !chatCards?.length &&
+                      ((!!submission && !submission.allowAttachmentOnly) ||
+                        (!attachments.items.length && !gifs?.length)) &&
+                      !(
+                        editing.target &&
+                        requestDeletion &&
+                        session.outbox?.supports(5)
+                      ))
               }
               icon={<ArrowUpIcon size={16} />}
             />

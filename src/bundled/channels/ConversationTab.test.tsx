@@ -10,6 +10,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, assert, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
 import type { RelaySession } from "../../features/relay/session";
 import type { RelayEvent } from "../../features/relay/events";
 import { createOutbox, type OutgoingEvent } from "../../features/relay/outbox";
@@ -84,11 +85,17 @@ vi.mock("../../features/messages/MessageComposer", () => ({
   MessageComposer: ({
     focusRequest,
     shown,
+    submitTarget,
   }: {
     focusRequest?: number;
     shown?: boolean;
+    submitTarget?: { label: string };
   }) => (
-    <div data-focus-request={focusRequest} data-shown={shown}>
+    <div
+      data-focus-request={focusRequest}
+      data-shown={shown}
+      data-submit-target={submitTarget?.label}
+    >
       Composer content
     </div>
   ),
@@ -763,7 +770,10 @@ it("tells the composer when its tab is shown, apart from whether showing visits"
     profiles: { snapshot: () => profiles, subscribe: idle },
     agentChoices: { snapshot: () => undefined, subscribe: idle },
   } as unknown as RelaySession;
-  const tab = (active: boolean) => (
+  const tab = (
+    active: boolean,
+    submitTarget?: ComponentProps<typeof ConversationTab>["submitTarget"],
+  ) => (
     <ConversationTab
       tab={{ id: "chat", kind: "conversation", channelId: "beta" }}
       channel={channel}
@@ -775,6 +785,7 @@ it("tells the composer when its tab is shown, apart from whether showing visits"
       close={() => {}}
       active={active}
       visit={false}
+      submitTarget={submitTarget}
     />
   );
   const view = render(tab(true));
@@ -784,4 +795,19 @@ it("tells the composer when its tab is shown, apart from whether showing visits"
   expect(composer).toHaveAttribute("data-shown", "false");
   view.rerender(tab(true));
   expect(composer).toHaveAttribute("data-shown", "true");
+  expect(composer).not.toHaveAttribute("data-submit-target");
+  // The channel composer is the one that answers a page's submit target.
+  view.rerender(
+    tab(true, {
+      key: "a",
+      label: "Answering",
+      placeholder: "Answer",
+      canSubmit: true,
+      onSubmit: async () => {},
+      onClose() {},
+      onDraftChange() {},
+      drafts: new Map(),
+    }),
+  );
+  expect(composer).toHaveAttribute("data-submit-target", "Answering");
 });

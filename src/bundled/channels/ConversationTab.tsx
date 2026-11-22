@@ -20,6 +20,7 @@ import { useMessageOpening } from "../../features/messages/use-message-opening";
 import { usePendingRequest } from "../../features/messages/use-pending-request";
 import type { MessageLinkOrigin } from "../../features/messages/MessageRow";
 import type { ThreadPanelProps } from "../../features/messages/ThreadPanel";
+import type { MessageComposerProps } from "../../features/messages/MessageComposer";
 import { ChannelBody } from "./ChannelBody";
 import { SoloColumn } from "../../features/solo/SoloPresentation";
 import type { ConversationTab as Tab } from "./useChannelTabState";
@@ -31,6 +32,8 @@ type ConversationTabProps = {
   intro?: ReactNode;
   subthreadId?: string | undefined;
   latestRequest?: AbortSignal | undefined;
+  /** Only the channel composer answers it; a thread shown here ignores it. */
+  submitTarget?: MessageComposerProps["submitTarget"];
   active: boolean;
   /** Showing the tab visits its conversation, as Channels does. */
   visit?: boolean | undefined;
@@ -58,6 +61,7 @@ export function ConversationTab({
   tab,
   intro,
   subthreadId,
+  submitTarget,
   latestRequest,
   active,
   visit = true,
@@ -228,6 +232,7 @@ export function ConversationTab({
               // Shown follows the tab, not whether showing it visits the chat.
               shown={active}
               onSend={setSent}
+              submitTarget={submitTarget}
               {...(focusRequest ? { focusRequest } : {})}
             />
           </SoloColumn>

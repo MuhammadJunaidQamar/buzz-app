@@ -516,6 +516,27 @@ export type ConversationWorkspaceProps = {
   label: string;
   /** Content at the start of history. It scrolls with the messages. */
   intro?: ReactNode;
+  /** While set, the channel composer submits to this target instead of
+   * sending. It shows `label` with a close button that calls `onClose`, and
+   * `placeholder`. Each `key` keeps its own draft, in memory for this
+   * Workspace, apart from the channel's draft. Send is active while
+   * `canSubmit` is, with or without text, and calls `onSubmit` with the
+   * text; the composer waits for it, then clears that key's draft if it is
+   * unchanged, or shows the rejection's message. A message edit, and a
+   * draft with an attachment, forward or chat card, take precedence over
+   * the target. `onDraftChange` hears whether the current key's draft has
+   * text. A thread target ignores it. */
+  submitTarget?: {
+    key: string;
+    label: string;
+    placeholder: string;
+    canSubmit: boolean;
+    onSubmit(text: string): Promise<void>;
+    onClose(): void;
+    onDraftChange(hasText: boolean): void;
+  };
+  /** The keys whose drafts to keep; the composer discards the rest. */
+  submitDraftKeys?: readonly string[];
   /** Actions in the pane's menu and the main tab's context menu. */
   actions?: readonly { label: string; run(): void }[];
   /** Select this panel on entry. Closing it keeps the main conversation. */

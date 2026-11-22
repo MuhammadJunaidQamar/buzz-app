@@ -463,6 +463,8 @@ export const fixturePlugins: readonly BundledPlugin[] = [
             opening: AbortSignal | undefined;
             signal: AbortSignal;
           }>();
+          const [answering, setAnswering] = useState(false);
+          const [answered, setAnswered] = useState<string>();
           const connection = useSyncExternalStore(
             relay.subscribe,
             relay.snapshot,
@@ -501,6 +503,12 @@ export const fixturePlugins: readonly BundledPlugin[] = [
               >
                 Jump retained transcript
               </button>
+              {ctx.conversation.workspaceSlots?.submitTarget && (
+                <button type="button" onClick={() => setAnswering(true)}>
+                  Answer in composer
+                </button>
+              )}
+              {answered !== undefined && <output>Answered: {answered}</output>}
               <div style={{ flex: 1, minHeight: 0 }}>
                 <Workspace
                   id="reader-fixture"
@@ -508,6 +516,19 @@ export const fixturePlugins: readonly BundledPlugin[] = [
                   scope={connection.scope}
                   label="Transcript fixture"
                   target={target}
+                  submitTarget={
+                    answering
+                      ? {
+                          key: "decision",
+                          label: "Answering the fixture decision",
+                          placeholder: "Answer the decision",
+                          canSubmit: true,
+                          onSubmit: async (text) => setAnswered(text),
+                          onClose: () => setAnswering(false),
+                          onDraftChange() {},
+                        }
+                      : undefined
+                  }
                   latestRequest={
                     request && request.opening === opening
                       ? request.signal

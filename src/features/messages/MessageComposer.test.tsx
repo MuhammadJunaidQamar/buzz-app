@@ -64,7 +64,7 @@ import { MENTION_RESOLVE_TIMEOUT_MS } from "../conversation/completion";
 import { bundledContribution } from "../../plugins/provenance";
 import { mentionQuery } from "../../bundled/mentions/mention-query";
 import { MentionCompletion } from "../../bundled/mentions/MentionCompletion";
-import type { MentionRecipient } from "./mention-draft";
+import type { MentionDraft, MentionRecipient } from "./mention-draft";
 import type { AgentLibrarySnapshot } from "../agents/library";
 import { createAgentChoices } from "../agents/choices";
 import type { LocalAgents } from "../agents/local";
@@ -78,7 +78,12 @@ import { fakeSpawn } from "../../bundled/claude-code/claude-testing";
 import { ConversationPresentation } from "../conversation/ConversationPresentation";
 import { AgentsContext } from "../agents/react";
 import type { Agents, Models } from "../agents/service";
-import { MessageComposer, type MessageComposerProps } from "./MessageComposer";
+import {
+  MessageComposer,
+  type MessageComposerProps,
+  type SubmitDrafts,
+  type SubmitTarget,
+} from "./MessageComposer";
 import { ThreadPanel } from "./ThreadPanel";
 import { publishOutgoing, type OutgoingMessage } from "./outgoing-message";
 import { MessageMarkdown } from "./MessageMarkdown";
@@ -18459,4 +18464,167 @@ it("returns focus to the composer when a focused accessory control goes away", (
   fireEvent.click(dismiss);
   expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
   expect(h.input()).toHaveFocus();
+});
+
+describe("submit target", () => {
+  function targetFixture(options: Partial<MessageComposerProps> = {}) {
+    const drafts: SubmitDrafts = new Map();
+    const onSubmit = vi.fn<SubmitTarget["onSubmit"]>(async () => {});
+    const onClose = vi.fn();
+    const onDraftChange = vi.fn();
+    const h = mount(options, undefined, first.pubkey);
+    const target = (next: Partial<SubmitTarget> = {}): SubmitTarget => ({
+      key: "a",
+      label: "Answering: Pick a plan",
+      placeholder: "Answer the decision",
+      canSubmit: true,
+      onSubmit,
+      onClose,
+      onDraftChange,
+      drafts,
+      ...next,
+    });
+    const send = () => screen.getByRole("button", { name: "Send message" });
+    const placeholder = () =>
+      h
+        .input()
+        .querySelector("[data-placeholder]")
+        ?.getAttribute("data-placeholder");
+    return {
+      ...h,
+      drafts,
+      onSubmit,
+      onClose,
+      onDraftChange,
+      target,
+      send,
+      placeholder,
+    };
+  }
+
+  it("answers the target with its own draft, then returns the channel's draft", async () => {
+    const h = targetFixture();
+    fillComposer(h.input(), "Channel draft");
+    h.retarget({ submitTarget: h.target({ canSubmit: false }) });
+    expect(screen.getByText("Answering: Pick a plan")).toBeVisible();
+    expect(h.input()).toHaveValue("");
+    expect(h.placeholder()).toBe("Answer the decision");
+    expect(h.send()).toBeDisabled();
+    fillComposer(h.input(), "Ship it");
+    expect(h.onDraftChange).toHaveBeenLastCalledWith(true);
+    expect(h.drafts.get("a")?.text).toBe("Ship it");
+    expect(readView("scope", "draft:channel", null)).toMatchObject({
+      text: "Channel draft",
+    });
+    h.retarget({ submitTarget: h.target() });
+    await h.user.click(h.send());
+    expect(h.onSubmit).toHaveBeenCalledExactlyOnceWith("Ship it");
+    await waitFor(() => expect(h.input()).toHaveValue(""));
+    expect(h.drafts.has("a")).toBe(false);
+    expect(h.onDraftChange).toHaveBeenLastCalledWith(false);
+    expect(h.messages.send).not.toHaveBeenCalled();
+    expect(h.onSend).not.toHaveBeenCalled();
+    h.retarget({ submitTarget: undefined });
+    expect(h.input()).toHaveValue("Channel draft");
+    expect(screen.queryByText("Answering: Pick a plan")).toBeNull();
+  });
+
+  it("is active without text and submits on Enter", async () => {
+    const h = targetFixture();
+    h.retarget({ submitTarget: h.target() });
+    expect(h.send()).toBeEnabled();
+    h.input().focus();
+    await h.user.keyboard("{Enter}");
+    expect(h.onSubmit).toHaveBeenCalledExactlyOnceWith("");
+  });
+
+  it("keeps each key's draft and discards keys no longer kept", () => {
+    const h = targetFixture();
+    h.retarget({ submitTarget: h.target() });
+    fillComposer(h.input(), "For a");
+    h.retarget({ submitTarget: h.target({ key: "b" }) });
+    expect(h.input()).toHaveValue("");
+    fillComposer(h.input(), "For b");
+    h.retarget({ submitTarget: h.target() });
+    expect(h.input()).toHaveValue("For a");
+    h.retarget({ submitTarget: h.target({ key: "b", keep: ["b"] }) });
+    expect(h.input()).toHaveValue("For b");
+    expect([...h.drafts.keys()]).toEqual(["b"]);
+  });
+
+  it("waits disabled for the answer and keeps the draft with the rejection's message", async () => {
+    const h = targetFixture();
+    let reject!: (reason: Error) => void;
+    h.onSubmit.mockImplementation(
+      () => new Promise<void>((_resolve, fail) => (reject = fail)),
+    );
+    h.retarget({ submitTarget: h.target() });
+    fillComposer(h.input(), "Ship it");
+    await h.user.click(h.send());
+    expect(h.send()).toBeDisabled();
+    expect(h.input()).toHaveAttribute("contenteditable", "false");
+    await act(async () => reject(new Error("The decision closed.")));
+    expect(screen.getByRole("alert")).toHaveTextContent("The decision closed.");
+    expect(h.input()).toHaveValue("Ship it");
+    expect(h.drafts.get("a")?.text).toBe("Ship it");
+    expect(h.send()).toBeEnabled();
+  });
+
+  it("keeps a draft that changed while its answer was pending", async () => {
+    const h = targetFixture();
+    let resolve!: () => void;
+    h.onSubmit.mockImplementation(
+      () => new Promise<void>((done) => (resolve = done)),
+    );
+    h.retarget({ submitTarget: h.target() });
+    fillComposer(h.input(), "Ship it");
+    await h.user.click(h.send());
+    h.drafts.set("a", { text: "Ship it today", recipients: [] });
+    await act(async () => resolve());
+    expect(h.drafts.get("a")?.text).toBe("Ship it today");
+  });
+
+  it("closes from the chip", async () => {
+    const h = targetFixture();
+    h.retarget({ submitTarget: h.target() });
+    await h.user.click(
+      screen.getByRole("button", { name: "Close Answering: Pick a plan" }),
+    );
+    expect(h.onClose).toHaveBeenCalledOnce();
+    expect(h.input()).toHaveFocus();
+  });
+
+  it("refuses a draft with a chat card", async () => {
+    const h = targetFixture();
+    h.drafts.set("a", {
+      text: "",
+      recipients: [],
+      chatCards: ["[Session: PR 45 fixes](buzz://channel/session-id)"],
+    } as MentionDraft);
+    h.retarget({ submitTarget: h.target() });
+    expect(screen.getByText("Remove the attachment to answer")).toBeVisible();
+    expect(h.send()).toBeDisabled();
+    fireEvent.submit(screen.getByRole("form"));
+    expect(h.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("gives way to a message edit and returns after it", async () => {
+    const h = targetFixture();
+    h.setRows([editableMessage()]);
+    h.retarget({ submitTarget: h.target() });
+    fireEvent.keyDown(h.input(), { key: "ArrowUp" });
+    expect(screen.getByText("Editing message")).toBeVisible();
+    expect(screen.queryByText("Answering: Pick a plan")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel edit" }));
+    expect(screen.getByText("Answering: Pick a plan")).toBeVisible();
+    expect(h.input()).toHaveValue("");
+    expect(h.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("is ignored by a thread composer", () => {
+    const h = targetFixture({ threadRootId: "root" });
+    h.retarget({ submitTarget: h.target() });
+    expect(screen.queryByText("Answering: Pick a plan")).toBeNull();
+    expect(h.placeholder()).not.toBe("Answer the decision");
+  });
 });

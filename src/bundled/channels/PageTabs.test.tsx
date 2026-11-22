@@ -15,6 +15,10 @@ import type { ConversationHostServices } from "../../features/conversation/Conve
 import type { ConversationExtensions } from "../../features/conversation/contracts";
 import { setThreadPlacementPreference } from "../../features/messages/thread-preferences";
 import type { RelaySession } from "../../features/relay/session";
+import type {
+  SubmitDrafts,
+  SubmitTarget,
+} from "../../features/messages/MessageComposer";
 import type { ConversationTab as Tab } from "./useChannelTabState";
 import {
   ConversationWorkspace,
@@ -23,6 +27,7 @@ import {
   type PageTabTarget,
 } from "./PageTabs";
 
+const shownDrafts = vi.hoisted((): SubmitDrafts[] => []);
 // The tab's own conversation has its mounted suite; this owner places it.
 vi.mock("./ConversationTab", () => ({
   ConversationTab: ({
@@ -32,8 +37,10 @@ vi.mock("./ConversationTab", () => ({
     onResolvedRoot,
     parent,
     intro,
+    submitTarget,
   }: {
     intro?: import("react").ReactNode;
+    submitTarget?: SubmitTarget;
     tab: Tab;
     channel: { name: string };
     visit: boolean;
@@ -47,6 +54,11 @@ vi.mock("./ConversationTab", () => ({
       data-mark-read={tab.kind === "conversation" ? tab.markRead : undefined}
       data-focus={tab.focusRequest}
       data-reply={tab.kind === "thread" ? tab.replyRequest : undefined}
+      data-submit-target={submitTarget?.label}
+      data-keep={submitTarget?.keep?.join(" ")}
+      ref={() => {
+        if (submitTarget) shownDrafts.push(submitTarget.drafts);
+      }}
     >
       {intro}
       {tab.kind} in {channel.name}
@@ -450,6 +462,39 @@ it("a workspace owns its main reader, intro, menu, and no initial detail", async
     await screen.findByRole("menuitem", { name: "View in source channel" }),
   );
   expect(source).toHaveBeenCalledOnce();
+});
+
+it("a workspace gives its submit target one set of drafts and the keys to keep", () => {
+  const f = fixture();
+  cleanup();
+  shownDrafts.length = 0;
+  const workspace = (key: string) => (
+    <ConversationWorkspace
+      id="task"
+      session={f.session}
+      scope="origin:viewer"
+      target={{ channelId: "alpha" }}
+      label="Task"
+      host={f.host}
+      submitTarget={{
+        key,
+        label: `Answering ${key}`,
+        placeholder: "Answer",
+        canSubmit: true,
+        onSubmit: async () => {},
+        onClose() {},
+        onDraftChange() {},
+      }}
+      submitDraftKeys={["a", "b"]}
+    />
+  );
+  const view = render(workspace("a"));
+  const reader = screen.getByText("conversation in alpha", { exact: false });
+  expect(reader).toHaveAttribute("data-submit-target", "Answering a");
+  expect(reader).toHaveAttribute("data-keep", "a b");
+  view.rerender(workspace("b"));
+  expect(reader).toHaveAttribute("data-submit-target", "Answering b");
+  expect(new Set(shownDrafts).size).toBe(1);
 });
 
 it.each([false, true])(
