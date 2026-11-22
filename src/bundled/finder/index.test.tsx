@@ -13,7 +13,16 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ShortcutsService } from "../../features/shortcuts/service";
 import type { PluginModule } from "../../plugins/api";
 import { PluginRuntime } from "../../plugins/runtime";
-import type { createRelaySession } from "../../features/relay/session";
+import { queryEvents } from "../../../tests/fixtures/finder-data";
+import { profileTarget } from "../../features/profiles/target";
+import { createRelaySession } from "../../features/relay/session";
+import {
+  type Key,
+  keypair,
+  metadata,
+  profile,
+  roster,
+} from "../../features/relay/testing";
 import * as finderPlugin from "./index";
 import { topInterest } from "./interest";
 import type { Finder, FinderItem, FinderSource } from "./service";
@@ -350,6 +359,123 @@ test("a failing or empty list says so", async () => {
   expect(
     await screen.findByText("Nothing matches. Try fewer letters."),
   ).toBeVisible();
+});
+
+test("built-in conversations and people rank by name and open on Enter", async () => {
+  const relayKey = keypair();
+  const maya = keypair();
+  const sam = keypair();
+  // Zoe's key sorts first, so a DM label in key order would lead with her.
+  const [zoe, ada] = [keypair(), keypair()].sort((a, b) =>
+    a.pubkey.localeCompare(b.pubkey),
+  ) as [Key, Key];
+  const dm = (id: string, members: string[], tags: string[][] = []) => [
+    metadata(relayKey, id, id, 1_700_000_000, [["t", "dm"], ...tags]),
+    roster(relayKey, id, [viewer, ...members]),
+  ];
+  const events = [
+    metadata(relayKey, "crew", "crew", 1_700_000_000, [["t", "stream"]]),
+    roster(relayKey, "crew", [viewer, maya.pubkey, sam.pubkey]),
+    metadata(relayKey, "lab", "lab"),
+    roster(relayKey, "lab", [viewer]),
+    metadata(relayKey, "old", "old", 1_700_000_000, [["archived", "true"]]),
+    roster(relayKey, "old", [viewer]),
+    ...dm("with-maya", [maya.pubkey]),
+    ...dm("solo", []),
+    ...dm("trio", [zoe.pubkey, ada.pubkey]),
+    profile(zoe, { name: "Zoe Park" }),
+    profile(ada, { name: "Ada Park" }),
+    profile(maya, { name: "Maya Chen", nip05: "maya@example.org" }),
+    profile(sam, { name: "Sam Lee" }),
+  ];
+  // Sam's name is held until released, so People first shows his key.
+  let releaseSam = () => {};
+  const samHeld = new Promise<void>((resolve) => {
+    releaseSam = resolve;
+  });
+  const askedForSam = vi.fn();
+  const owner = createRelaySession({
+    viewer,
+    relayAuthor: relayKey.pubkey,
+    media: () => undefined,
+    query: async (filters) => {
+      const profileRead = (filter: (typeof filters)[number]) =>
+        filter.kinds?.includes(0) && filter.authors?.includes(sam.pubkey);
+      if (filters.some(profileRead)) {
+        askedForSam();
+        await samHeld;
+      }
+      return queryEvents(events, filters);
+    },
+  });
+  await owner.session.channels.ensureList();
+  await owner.session.profiles.ensure([maya.pubkey, zoe.pubkey, ada.pubkey]);
+  const opener = consumer();
+  const { show, open } = await mount({ "example.keys": opener.module }, owner);
+  show();
+  // People rows lead with an avatar's initial.
+  const named = () => rows().map((row) => row.replace(/^./, ""));
+  await act(async () => opener.used.finder?.open("buzz.finder/conversations"));
+  // Archived channels stay out; a DM is named for who's in it, by name
+  // order as everywhere else.
+  expect(rows().sort()).toEqual([
+    "#crew",
+    "Ada Park, Zoe ParkDirect message",
+    "Maya ChenDirect message",
+    "Notes to selfDirect message",
+    "lab",
+  ]);
+  await act(async () => opener.used.finder?.open("buzz.finder/conversations"));
+  type("cre");
+  expect(rows()).toEqual([expect.stringContaining("#crew")]);
+  await act(async () => screen.getByRole("option").click());
+  expect(open).toHaveBeenLastCalledWith(
+    expect.objectContaining({ kind: "conversation", channelId: "crew" }),
+  );
+  // Everyone but you. Finder asks for names it doesn't have, and shows
+  // them as they arrive.
+  vi.useFakeTimers();
+  try {
+    await act(async () => opener.used.finder?.open("buzz.finder/people"));
+    await vi.waitFor(() => expect(askedForSam).toHaveBeenCalled());
+    expect(named().sort()).toEqual(
+      [
+        "Ada Park",
+        "Maya Chenmaya@example.org",
+        "Zoe Park",
+        sam.pubkey.slice(0, 10),
+      ].sort(),
+    );
+    await act(async () => releaseSam());
+    // Names relabel a second after they arrive.
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(named()).toContain("Sam Lee");
+  } finally {
+    releaseSam();
+    vi.useRealTimers();
+  }
+  await act(async () => opener.used.finder?.open("buzz.finder/people"));
+  type("example");
+  // Matched by NIP-05 address as well as name.
+  expect(rows()).toEqual([expect.stringContaining("Maya Chen")]);
+  await act(async () => screen.getByRole("option").click());
+  // Your DM with them, as ⌘K opens.
+  expect(open).toHaveBeenLastCalledWith(
+    expect.objectContaining({ channelId: "with-maya" }),
+  );
+  expect(open.mock.lastCall).not.toHaveProperty([0, "detail"]);
+  await act(async () => opener.used.finder?.open("buzz.finder/people"));
+  type("sam");
+  expect(rows()).toEqual([expect.stringContaining("Sam Lee")]);
+  await act(async () => screen.getByRole("option").click());
+  // No DM: the profile opens beside a conversation you share.
+  expect(open).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      channelId: "crew",
+      detail: { target: profileTarget(sam.pubkey) },
+    }),
+  );
+  owner.dispose();
 });
 
 test("switching to another list keeps the text and shows only its rows", async () => {

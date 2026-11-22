@@ -6,6 +6,7 @@ import { activeModal } from "../../shared/design-system/overlayLayer";
 import { createCorpus } from "./corpus.ts";
 import { noteInterest, topInterest } from "./interest";
 import { provideFinder, type RegisteredSource } from "./service";
+import { builtinSources } from "./sources";
 import type { FinderScope } from "./FinderDialog";
 import {
   type FinderSync,
@@ -87,10 +88,11 @@ export const apply: PluginModule["apply"] = (ctx) => {
         ? show("buzz", source)
         : show(here()),
   );
-  /** Opens a conversation in the connected community. */
+  /** Opens a conversation in the connected community, optionally with a
+   * detail (such as a profile) beside it. */
   const openConversation = (
     channelId: string,
-    extra: { messageId?: string; threadRootId?: string } = {},
+    extra: { messageId?: string; threadRootId?: string; detail?: string } = {},
   ) => {
     const { viewer, scope } = relay.snapshot();
     if (!viewer || !scope?.endsWith(`:${viewer}`)) return;
@@ -101,12 +103,27 @@ export const apply: PluginModule["apply"] = (ctx) => {
       channelId,
       ...(extra.messageId && { messageId: extra.messageId }),
       ...(extra.threadRootId && { threadRootId: extra.threadRootId }),
+      ...(extra.detail && { detail: { target: extra.detail } }),
     });
   };
+  // Finder's own lists sit beside the registry, under the same key form.
+  const builtins = builtinSources({
+    session: () => state.session,
+    current: () => {
+      const { target } = ctx.navigation.snapshot().entry;
+      return target.kind === "conversation" ? target.channelId : undefined;
+    },
+    open: (channelId, detail) =>
+      openConversation(channelId, detail ? { detail } : {}),
+  });
   const find = (
     key: string | undefined,
     registered: readonly RegisteredSource[],
-  ) => (key ? registered.find((entry) => entry.key === key) : undefined);
+  ) =>
+    key
+      ? (builtins.find((entry) => entry.key === key) ??
+        registered.find((entry) => entry.key === key))
+      : undefined;
   const known = (key: string) => !!find(key, sources.snapshot());
   // A list that goes away leaves All of Buzz, and doesn't come back unasked.
   ctx.effect(() =>
