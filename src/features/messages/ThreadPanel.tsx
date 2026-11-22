@@ -1,6 +1,11 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: The thread region supports keyboard scrolling and Escape.
 import { DialogBarMaterial } from "../../shared/design-system/ui/DialogBarMaterial";
 import { hostComposerProvenance } from "./mention-draft";
+import {
+  composerHost,
+  type MediaReviewOrigin,
+  useComposerScope,
+} from "./composer-overlay";
 import { AgentConnectionSetup } from "../agents/AgentConnectionSetup";
 import { TypingIndicator, useLiveConversationAgents } from "./TypingIndicator";
 import { ActivityExpansion } from "./ActivityExpansion";
@@ -131,6 +136,7 @@ export type ThreadPanelProps = {
     seconds: number,
     hasComments?: boolean,
     attachments?: ChannelMessage["attachments"],
+    opening?: MediaReviewOrigin,
   ): void;
   canOpenLink?: ((target: string) => boolean) | undefined;
 };
@@ -1357,6 +1363,8 @@ function ThreadMessages({
     (snapshot.root?.replyCount ?? 0) > 0 ||
     snapshot.replies.length > 0 ||
     (!!snapshot.target && snapshot.target.id !== rootId);
+  // Media opens over this thread's view while its reply box shows.
+  const composerView = useComposerScope();
   const openRootMedia = useCallback(
     (
       _rowId: string,
@@ -1365,16 +1373,18 @@ function ThreadMessages({
       _hasComments?: boolean,
       attachments?: ChannelMessage["attachments"],
     ) => {
-      if (rootId)
-        onOpenMediaReview?.(
-          _rowId,
-          attachment,
-          seconds,
-          hasMediaComments,
-          attachments,
-        );
+      if (!rootId) return;
+      const host = composerHost(composerView?.handle);
+      onOpenMediaReview?.(
+        _rowId,
+        attachment,
+        seconds,
+        hasMediaComments,
+        attachments,
+        host ? { host, rootId } : undefined,
+      );
     },
-    [rootId, onOpenMediaReview, hasMediaComments],
+    [rootId, onOpenMediaReview, hasMediaComments, composerView],
   );
   // Without a selected viewer, bare timecodes need one unambiguous video.
   const videoUrls = new Set(
