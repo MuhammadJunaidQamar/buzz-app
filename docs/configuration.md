@@ -151,7 +151,7 @@ A blank or unset value uses the packaged selection below.
 
 An organization that packages its own build can ship its descriptors in
 `src/bundled/org-gateways.json` instead of setting `BUZZ_AGENT_GATEWAY`,
-beside its [organization plugins](plugin-architecture.md#organization-plugins).
+beside its organization plugins.
 The file is a list of at most 8 descriptors, each in the shape above, and is
 `[]` in open-source builds. A packager replaces it at build time, for example
 with one descriptor for its production community and one for its staging
@@ -189,8 +189,7 @@ gateway only when the relay's NIP-11 `read_state_snapshot.community_id` is
 exactly the listed ID, the descriptor gives the agent type's declared harness
 an upstream, the gateway's access check succeeds, and the check's `harnesses`
 list names that harness. A bundled plugin can supply that list for the launch
-instead, with `ctx.agents.gatewayHarnesses(source)`; see
-[Plugin architecture](plugin-architecture.md). When that list is empty, or
+instead, with `ctx.agents.gatewayHarnesses(source)`. When that list is empty, or
 the plugin fails or answers late, no access check runs and every agent keeps
 its existing behavior, with nothing sent to the gateway. A harness a
 non-empty list leaves out keeps its existing behavior too, and its turns never
@@ -337,7 +336,7 @@ With it set:
 On a config channel, the mark syncs with the agent's settings: its
 `buzz.agent.settings` revision (kind 45010) carries `"preset": "recommended"`
 beside `settings`, not inside it, and leaves it out otherwise. The revision also carries a matching `["preset", "recommended"]` tag, so agents on Automatic can be counted from tags alone. A bundled plugin's
-note on the agent (`pluginNotes`, see plugin-architecture.md) sits beside it
+note on the agent (`pluginNotes`) sits beside it
 too, and a tagged note adds a `["note", pluginId, tag]` tag. Versions without
 this feature ignore it there and keep it when they edit (NIP-AP "Editing"), so
 their strict settings check never rejects it. The synced revision decides on
@@ -351,7 +350,7 @@ its kind 30177 record.
 A bundled plugin, such as one in an organization's own build, can replace the
 setup for a launch with `ctx.agents.recommend(source)`,
 for example to choose candidates per person or team from the organization's
-own services; see [Plugin architecture](plugin-architecture.md). Its answer
+own services. Its answer
 has this setting's object shape and is checked the same way. Buzz waits for it
 at most five seconds from start-up, and only before creating an agent or
 finding what one runs on. No answer, a failure, an invalid setup, or a late one
@@ -486,14 +485,13 @@ communities, Apps and decisions always use the build's Builderlab.
 `signIn` and `organization` are optional. `signIn` is `on-demand` by default:
 the app asks for organization sign-in only when a protected community refuses
 the viewer, or from Settings → Identity. `at-launch` signs in before the app
-opens and again whenever the session ends (see
-[identity](identity.md#sign-in-at-launch)). `organization` is the display name
+opens and again whenever the session ends. `organization` is the display name
 used in that sign-in copy, up to 64 characters. Neither is part of the deployment
 fingerprint, so changing them keeps saved sessions. Each server's sessions are
 stored under its own fingerprint, so adding servers keeps those saved before.
 
 The first-run welcome screen's **Sign in with email** is this native
-organization sign-in (see [identity](identity.md)).
+organization sign-in.
 
 Vite uses its existing environment loader; the native plugin-manager build reads
 repository-root `.env.local` and process values using the native dotenv pattern.
@@ -538,7 +536,7 @@ redistribute to change a packaged value.
 After Builderlab sign-in, the first-launch flow reads four things about the
 account from kgoose: the Nostr key bound to it, the communities it owns, the
 destinations saved to it ([known communities](communities.md#known-communities))
-and the keys it holds a backup of ([identity](identity.md)), binds a key it creates or
+and the keys it holds a backup of, binds a key it creates or
 imports to an unlinked account, and, on Start over, unlinks the lost key
 before binding the new one. A developer's real account is bound to their real key and that binding
 must not change, so `BUZZ_DEV_FIRST_RUN_ACCOUNT` replaces those reads, the
@@ -615,7 +613,7 @@ and this app does not.
 
 | OG/release input | Why it is not implemented here |
 | --- | --- |
-| `BUZZ_DESKTOP_BUILD_RELAY_URL` | Retired name; internal builds use `BUZZ_DEFAULT_COMMUNITY_URL` above. No legacy input alias or admission bypass is added. Native macOS, Windows and Linux otherwise restore the selected saved community; new admission uses Join a community. Windows/Linux installed-app acceptance remains unverified. The dev broker and saved agent destinations remain separate. See [packaged identity](identity.md). |
+| `BUZZ_DESKTOP_BUILD_RELAY_URL` | Retired name; internal builds use `BUZZ_DEFAULT_COMMUNITY_URL` above. No legacy input alias or admission bypass is added. Native macOS, Windows and Linux otherwise restore the selected saved community; new admission uses Join a community. Windows/Linux installed-app acceptance remains unverified. The dev broker and saved agent destinations remain separate. See packaged identity. |
 | `BUZZ_BUILD_RELAY_RECONNECT_CMD` | No reconnect-command feature; arbitrary deployment command execution is not added. |
 | Updater helper fallback aliases | Only the two canonical updater names above are read. Private signing keys never belong in app defaults. |
 | `--features mesh-llm` | No mesh/provider integration is supplied by the native identity crate. Import carries identities, not legacy runtimes. |

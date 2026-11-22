@@ -20,8 +20,16 @@ just hooks
 
 - `just web` runs the app in your browser.
 - `just desktop` runs the native app with its own development identity.
-- `just desktop me` runs it as the account in your installed Buzz. The first
-  time, macOS asks for Keychain access; choose **Always Allow**.
+- `just desktop me` runs it as the account in your installed Buzz.
+
+On macOS, `just desktop me` reads the Keychain through a small helper,
+`crates/dev-credential-helper`. Keychain treats every rebuild of a debug build as
+a new program and would ask again each time, so the helper is installed once
+outside the repository and your approvals stay with it, across rebuilds and
+worktrees. The first launch asks once for `codesign` and once for each saved
+item; choose **Always Allow** each time. Plain `just desktop` never uses the
+helper. Don't use `me` on a shared macOS account: any program running as you
+can get through the helper's check.
 
 To use your real account in `just web`, sign in to Buzz on this computer, then
 put that account's **public** key in `.env.local` at the repository root. Never
@@ -85,5 +93,5 @@ should include a screenshot, and bigger behavioral changes a video!
 
 - [AGENTS.md](AGENTS.md)
 - [Browser testing](docs/browser-testing.md)
-- [Plugin architecture](docs/plugin-architecture.md)
+- [Plugins](docs/plugins.md)
 - [Desktop releases](docs/releases.md)

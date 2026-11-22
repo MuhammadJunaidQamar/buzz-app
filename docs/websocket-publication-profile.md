@@ -13,8 +13,7 @@ replay or HTTP fallback for uncertain writes.
 `just web` and `just desktop` use the development broker; packaged builds do not
 include it ([live relay development](../CONTRIBUTING.md#run-it)). Frontend and broker must be
 updated together. Finite reads/history/search, presence semantics, profile setup,
-media and external/local services are not migrated by this PR. See the
-[transport contract](relay-queries.md#websocket-first-publication).
+media and external/local services are not migrated by this PR.
 
 **Measurement snapshot:** the action tables below were collected before the
 app disabled automatic roster warming. They describe the transport/admission

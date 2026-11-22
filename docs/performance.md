@@ -24,7 +24,7 @@ The existing browser fixture owns the production React/services/IndexedDB/Virtua
 app and modeled local HTTP broker. The runner owns settings and measurement
 windows; scenarios own setup, actions and proof that the intended work occurred.
 There is no comparison engine or second checkout. Thread scrolling has advisory
-[targets](channels.md#targets); no case fails on timing.
+[targets](#thread-scrolling-targets); no case fails on timing.
 
 ## Measurements
 
@@ -275,7 +275,7 @@ older page after a modeled 150ms round trip. They report `firstRowsMs` and
 ## Thread scrolling
 
 `--scenario thread-scroll` measures the long-thread workload behind the
-[thread scrolling targets](channels.md#targets). `tests/browser/perf/thread-corpus.mjs`
+[thread scrolling targets](#thread-scrolling-targets). `tests/browser/perf/thread-corpus.mjs`
 fills the strict-window fixture thread with 460 weekly-update replies from 40
 authors: Markdown lists, bold text, inline code, mentions, links, quotes and plain
 prose, with 19 replies in collapsed branches. Their heights follow a real long
@@ -305,6 +305,22 @@ arrive one rendering update apart, so use its frame intervals, not its duration 
 frame count. WebKit samples have no DevTools counters, CPU throttling or
 long-animation-frame data. Neither engine shows trackpad momentum or painted
 pixels; `domGapFrames` stays zero while the macOS app shows blank regions.
+
+### Thread scrolling targets
+
+These targets are for the 460-reply thread above in the macOS app, with every
+reply loaded and a 60 Hz display. A measured run is two upward trackpad flings
+with a reversal, then Jump to latest. They are advisory: the suite reports them
+and doesn't fail CI on them.
+
+| While scrolling the loaded thread | Target | Ceiling |
+| --- | --- | --- |
+| 95th-percentile frame interval | 16.7 ms (60 fps) | 33 ms |
+| Frames longer than two 60 Hz frames, per run | 0 | 5 |
+| Captured frames with a blank band (35% of the pane or more), per run | 0 | 5 |
+
+The target is the goal. The ceiling is the line a regression must not cross
+while the target is out of reach.
 
 ### Native thread scrolling
 

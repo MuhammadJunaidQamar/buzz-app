@@ -31,8 +31,8 @@ scope, distinct from a plugin's unspecified community scope. Focus-only skip lin
 do not add visits. Plugin recovery remains available in Settings → Plugins → Manage plugins without
 blocking Profile or Appearance.
 
-See [design system and appearance](design-system.md) for Light/Dark settings,
-semantic tokens, UI authoring rules and the local component reference.
+See the [design system](../src/shared/design-system/DESIGN.md) for semantic
+tokens, UI authoring rules and the local component reference.
 
 ## Where to change the design
 
@@ -238,7 +238,7 @@ the custom header does not open the native system menu. Keyboard and edge-snap
 behavior remain native and require per-platform acceptance testing.
 The main capability includes scoped
 HTTP(S) opening for
-[external links](channels.md#run-the-integration). See
+external links. See
 [Tauri window customization](https://v2.tauri.app/learn/window-customization/).
 
 The main desktop window uses Tauri's window-state plugin to save its size,
@@ -376,7 +376,7 @@ does not leave the caret on the picker. With nothing interrupted, focus lands on
 that community.
 Opening a menu or running any item never acquires an inactive session, and the
 picker still claims no unread total: the unread capability provides bounded
-observed evidence, not exact community totals ([unread ownership](unread.md)).
+observed evidence, not exact community totals.
 
 Visible copy uses Buzz, never “workspace.” The legacy `workspace` layout identifier
 and CSS variable are implementation details retained for plugin compatibility.
@@ -552,7 +552,7 @@ label. Retry remains available for failed/unknown operations. `delivery.test.ts`
 covers the timing boundary and terminal states.
 
 The shared conversation layer now supplies bounded thread reading/replies and
-[session-owned unread indicators](unread.md). These are separate from this styling
+session-owned unread indicators. These are separate from this styling
 pass: counts remain observed rather than exact, manual unread is local-only, and
 reading intent belongs to reusable conversation UI rather than shell navigation.
 

@@ -423,6 +423,6 @@ for (const { at, found, why } of failures) {
   console.error(`        ${why}\n`);
 }
 console.error(
-  "Add the step to the palette in tokens.css, or add a documented override\nin scripts/design-system/check-color.mjs with a reason. See DESIGN.md § Colour discipline.",
+  "Add the step to the palette in tokens.css, or add a documented override\nin scripts/design-system/check-color.mjs with a reason. See DESIGN.md § Colour structure.",
 );
 process.exit(1);

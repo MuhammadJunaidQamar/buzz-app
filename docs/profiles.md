@@ -32,7 +32,7 @@ as identity or authorization evidence.
 Opening an agent's activity (`buzz:profile?agent=<key>&tab=activity`, from a
 message's activity bubble, a working indicator, a channel popover or a message's
 **View activity**) opens its profile on its type's Activity tab: the agent's
-sessions and their transcripts (see [Agents](agents.md#agent-types-and-providers)).
+sessions and their transcripts.
 An agent whose type has no Activity tab, or one this app does not keep, opens on
 its first tab. Profiles show no activity preview and host no separate activity
 panel.

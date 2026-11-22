@@ -16,8 +16,7 @@ A bundled desktop plugin, on by default on macOS and Linux. Agents owns identity
 admission, configuration and signing; this plugin runs one `codex app-server`
 shared by all agents, with a separate Codex thread per Buzz conversation.
 It exposes the [shared session tools](../../buzz-mcp/session-tools.ts) in the
-`buzz` dynamic-tool namespace. See [Agents](../../../docs/agents.md) for the
-shared agent behavior and settings.
+`buzz` dynamic-tool namespace.
 
 ## Sessions
 

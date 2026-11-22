@@ -8,10 +8,10 @@ and acceptance gaps here; keep chronological results in the [archive](#historica
 
 - Host-owned session revocation and independently reachable host shutdown. Channels
   owns its page/navigation/layout under `src/bundled/channels`; reusable conversation
-  components live in `src/features/messages` ([ownership](channels.md#reusing-conversation-ui)).
+  components live in `src/features/messages`.
 - Explicit public development-identity pin and typed secure relay origins. Live
   development uses the opt-in broker. Native macOS, Windows and Linux have
-  [packaged identity, admission and relay access](identity.md). Installed-app
+  packaged identity, admission and relay access. Installed-app
   acceptance remains open, including the Windows/Linux secure-store and transport
   paths.
 - React lifecycle repair, current-DOM scroll metrics and a checked-in Chromium/WebKit
@@ -25,14 +25,13 @@ See [contributing](../CONTRIBUTING.md) for maintained commands and test organiza
 ## Decisions to preserve
 
 - Keep `app/`, `plugins/`, `features/` and `bundled/`; no parallel `core/` tree.
-  [Plugin architecture](plugin-architecture.md) maps ownership. Shared Rust plugin
+  Shared Rust plugin
   installation belongs in `crates/plugin-manager`; Tauri commands stay adapters.
 - Host services own identity, authorization, retained data and durable delivery.
   Pages own their complete UI and local intent; panels own target content. Do not
   introduce a second connection, optimistic cache or outbox in a page plugin.
 - Read revocation purges inaccessible host views and fences obsolete work; it does
   not delete pending signed intent, re-sign retries or erase trusted-plugin copies.
-  [Relay queries](relay-queries.md) is the authority for these semantics and budgets.
 - Session-owned views use **scope + generation**; persisted drafts/reading intent
   use stable **scope**. [Communities](communities.md) owns selection and lifetimes.
 - Plugins are trusted same-process code, not sandboxed. Host cancellation must be
@@ -69,7 +68,7 @@ consent. Owner review decides expansion; this checklist does not authorize it.
 - Thread windows open newest-first on supporting relays, capped at ten pages of
   50. Legacy fallback still traverses oldest-first and cannot guarantee the newest
   tail in long threads. Empty unsigned probes stay unavailable rather than imply
-  exhaustion. [Thread behavior](channels.md#viewing-threads).
+  exhaustion.
 
 - Cold/oversized geometry may restore an offset while shifting the message being
   read. Exact cold message anchors need a separate product change; see
@@ -86,7 +85,7 @@ consent. Owner review decides expansion; this checklist does not authorize it.
   and a bounded prototype preserving relay authorization and durable unknown outcomes.
 - No sandbox/marketplace, universal UI SDK, agent API, broad community administration
   or speculative query-engine rewrite is included. Existing feature omissions and
-  budgets remain in [Channels](channels.md) and [communities](communities.md).
+  budgets remain in [communities](communities.md).
 
 ## Historical evidence
 

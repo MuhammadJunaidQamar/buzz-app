@@ -127,8 +127,7 @@ architecture contract. Also keep:
 - shared contract cases both hosts consume, and host-side enforcement in
   `src-tauri/` and `browser-host/`: necessary host validation is not
   duplication of frontend checks;
-- regression sources a design doc names, such as the shared agent selection
-  tests in `docs/agents.md`;
+- regression sources a design doc names;
 - CI selection contracts: `tests/integration/browser-ci.test.mjs`, the
   measurement and `@local-webkit` cases `docs/browser-testing.md` lists, and
   the only case behind a project tag;

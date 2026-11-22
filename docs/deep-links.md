@@ -46,7 +46,7 @@ again (`identity/sign-in-requests.ts`). Unlike bare `buzz://`, it wins like any
 other latest link: when links arrive together and it is the last, it is the one
 acted on and the others do not open.
 
-External authorization links show owner consent. They never grant access on arrival. The [external app protocol](agents.md#external-app-authorization) defines the callback, S256 exchange, scopes, and expiry. Handshake values stay outside navigation history.
+External authorization links show owner consent. They never grant access on arrival. Handshake values stay outside navigation history.
 
 Plugin install links open **Settings > Plugins > Manage plugins** and fetch a
 preview from the Git repository and optional branch or tag. The repository accepts
@@ -69,8 +69,7 @@ repository credentials are rejected.
 
 The Settings target has no community scope. A new installation completes identity
 setup before the app can show it. Repositories hosted by a Buzz community require
-that community to be selected and connected for authentication. See
-[Git imports and SSH agents](plugin-architecture.md#open-a-git-import-from-a-link).
+that community to be selected and connected for authentication.
 
 Query-based invite, message and plugin links also accept a single `/` before `?`,
 as supplied by Windows URL activation (for example, `buzz://join/?relay=…&code=…`).
@@ -121,7 +120,7 @@ existing join dialog with the relay and code prefilled; it never claims or saves
 membership until the user completes discovery, policy acceptance, claim and profile
 confirmation. The first-run welcome screen hands an address (and invite code)
 typed there to the same intent when it enters the app on a restored community
-instead ([identity](identity.md)), so one dialog serves both. The relay's HTTPS `/invite/<code>` page supplies that `buzz://join`
+instead, so one dialog serves both. The relay's HTTPS `/invite/<code>` page supplies that `buzz://join`
 link; HTTPS itself is not registered as an OS handler. `buzz://connect`
 (the relay website's **Open in Buzz**) and `buzz://add-community` (hosted
 community **Open in Buzz**; `name` is ignored) are the same form without a code:

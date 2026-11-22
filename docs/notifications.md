@@ -54,13 +54,13 @@ checks, not that an OS banner was displayed or read.
 ## Running-app behavior
 
 - Built-in mentions, DMs and conversation replies
-  ([relevant replies](unread.md#relevant-replies)) consume the selected
+  consume the selected
   community's verified live kind-9 and kind-40002 traffic and existing
   unread/visibility facts. Structured kind-40002 bodies use the same decoded text
   as message rows. No new socket, unread engine or background-community
   subscription is added.
 - Workflow-owner attribution is not a mention. The shared
-  [workflow mention classifier](unread.md#workflow-mentions) preserves explicit
+  workflow mention classifier preserves explicit
   template mentions and other recipients; DM and relevant-reply policies still
   apply. This does not change notification settings or suppress all workflows.
 - Local agent completions alert only for relay-verified Solo chats. Their agent
@@ -71,8 +71,7 @@ checks, not that an OS banner was displayed or read.
   Solo chat stays quiet. Ordinary DMs keep their message alerts and do not receive
   an additional agent-completion alert.
 - Messages signed `audience=agents` (coordination between agents) never alert,
-  even when they mention the viewer. The unread engine applies the same rule
-  ([quiet agent messages](unread.md#relevant-replies)), so badges, Inbox, thread
+  even when they mention the viewer. The unread engine applies the same rule, so badges, Inbox, thread
   activity and the Dock indicator agree with the alert gate.
 - History, initial/reconnect replay and own messages stay quiet. Candidates older
   than two minutes (or over 30 seconds in the future) are ignored. Unknown read

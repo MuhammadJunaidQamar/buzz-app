@@ -18,8 +18,7 @@ The plugin owns the UI only. Every admin request goes through the native admin
 client in `src-tauri/src/relay_admin/` (contract in
 `src/features/relay-staff/contract.ts`). The webview names a route and supplies
 typed fields; native code discovers and validates the admin host, builds the
-URL, enforces the address policy and signs with NIP-98. See the "Packaged
-connection" section of [identity.md](identity.md) for the address rules. Only
+URL, enforces the address policy and signs with NIP-98. Only
 admin hosts that resolve to public addresses are supported: the native client
 refuses private, CGNAT and `.internal` addresses.
 

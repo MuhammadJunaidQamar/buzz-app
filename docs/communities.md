@@ -49,7 +49,7 @@ and current profile readback before the client saves the completed membership.
 Rejected setup retains input and does not replace the currently selected community.
 An admitted invite is a remote side effect and is not undone if later profile
 setup fails or is cancelled. The native first-run **Join Community** page
-(`features/identity/Welcome.tsx`, [identity](identity.md)) is the only other
+(`features/identity/Welcome.tsx`) is the only other
 caller of `communities.joined`, through the same owner as the dialog
 (`join.ts`): the join is journaled before any remote effect, a code from an
 invite link or the invite page is claimed with the same policy receipt and
@@ -72,7 +72,7 @@ by an invite claim to the community's starter channels, so they are already in
 the sidebar and Messages opens the first of them. An open community needs no
 claim: there the relay adds each person, though not agents, to the starter
 channels they have never been in each time they connect, so those channels
-appear a moment later. See [local-first launch](channels.md#local-first-launch).
+appear a moment later.
 
 A brand-new community has no channels. When its owner opens Messages there,
 having joined no channel, the client reads at most 20 stream or forum metadata
@@ -239,7 +239,7 @@ the service was unreachable can likewise land after another device's removal.
 Joining and leaving never wait for sync. The `knownCommunities` capability
 exposes the record, the queue and these writes to one owner, the bundled
 Builderlab plugin. First run reads the same account list after the Builderlab
-sign-in and restores it before the app opens ([identity](identity.md)): each
+sign-in and restores it before the app opens: each
 destination that admits the new device's key is joined through an admission
 read, so a refused or unreachable one is not saved then; the next sign-in's
 merge adds it without a read, as for any other device. Removals are ignored
@@ -312,11 +312,11 @@ still fence obsolete work within a session; they are not persistent storage keys
 Channel-head persistence now includes community origin as well as viewer, rather
 than relying solely on the relay signing key. In development broker mode signing keys never enter browser
 JavaScript; local preferences contain the public viewer ID only. The app-owned
-[native identity UI](identity.md) has deliberate import/reveal/copy interactions,
+native identity UI has deliberate import/reveal/copy interactions,
 not a plugin key service.
 
 Packaged builds do not include the broker. Native macOS, Windows and Linux
-[identity import/create](identity.md) and the shared native relay adapter provide
+identity import/create and the shared native relay adapter provide
 discovery, admission, leave requests, profile publication, authenticated reads and
 supported event writes. Native invite minting and relay-advertised KLIPY GIF search
 use the same captured HTTPS community; neither requires the development broker.
@@ -355,7 +355,7 @@ completions cannot advance an unmounted dialog or a replaced transaction.
 
 Saved memberships are restored through the existing session owner. Uncertain
 message delivery stays in the existing endpoint/viewer-scoped IndexedDB outbox,
-with no automatic resend on restart. See the [native transport limits](identity.md#packaged-connection).
+with no automatic resend on restart.
 
 ## Development broker boundary
 
@@ -406,7 +406,7 @@ plugins and local processes remain trusted, not sandboxed. User-directed HTTPS
 networking may reach internal/private destinations. This is not a public-only
 network policy or DNS-rebinding defense; TLS verification remains enabled.
 This broker integration does not expose private keys to JavaScript or widen CSP.
-The separate [native identity adapter](identity.md) deliberately exports keys for
+The separate native identity adapter deliberately exports keys for
 backup; same-origin plugin JavaScript is trusted and can invoke that IPC too.
 
 ## Verification

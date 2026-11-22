@@ -13,7 +13,7 @@ A test instance signs with the shared debug Keychain identity, the same key
 `bin/just desktop` and `bin/just web` use. A different app identifier, port or
 `BUZZODZ_PROFILE` does **not** isolate it, so whatever an agent does through
 the bridge, it does as that key, in that key's communities. Do not replace a
-developer's active identity. See [identity custody](identity.md).
+developer's active identity.
 
 For automation you do not supervise, use a disposable macOS account or VM with
 generated test keys and a local test relay. To let an agent test against a live
