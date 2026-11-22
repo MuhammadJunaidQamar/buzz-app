@@ -23,6 +23,8 @@ import {
   FinderDialog,
   type FinderScope,
 } from "../../src/bundled/finder/FinderDialog";
+import type { RegisteredSource } from "../../src/bundled/finder/service";
+import { builtinSources } from "../../src/bundled/finder/sources";
 import { startFinderSync } from "../../src/bundled/finder/sync";
 import { syntheticDocs } from "../../src/bundled/finder/synthetic.ts";
 
@@ -141,6 +143,32 @@ if (extra) {
   );
 }
 
+// A plugin's list, as `ctx.finder.registerSource` would hold it.
+const fruit: RegisteredSource = {
+  key: "example.fixture/fruit",
+  id: "fruit",
+  title: "Fruit",
+  items: () =>
+    ["Apple", "Banana", "Blackberry", "Cherry", "Grape", "Mango"].map(
+      (label) => ({
+        id: label.toLowerCase(),
+        label,
+        detail: "Sample plugin row",
+        keywords: label === "Mango" ? "tropical" : "",
+        run: () => console.log(`chose ${label}`),
+      }),
+    ),
+};
+
+// Finder's built-in lists: ?source=conversations or ?source=people.
+const builtins = builtinSources({
+  session: () => session,
+  current: () => params.get("channel") ?? undefined,
+  open: (channelId, detail) =>
+    console.log(`open ${channelId}${detail ? ` with ${detail}` : ""}`),
+});
+const sources = [fruit, ...builtins];
+
 function App() {
   useKeyboardFocusVisibility();
   const [open, setOpen] = useState(true);
@@ -148,6 +176,9 @@ function App() {
   const currentChannelId = params.get("channel") ?? undefined;
   const [scope, setScope] = useState<FinderScope>(
     currentChannelId ? "channel" : "buzz",
+  );
+  const [source, setSource] = useState(
+    sources.find((source) => source.id === params.get("source")),
   );
   const [revision, setRevision] = useState(0);
   const [sync, setSync] = useState<ReturnType<typeof startFinderSync>>();
@@ -166,6 +197,7 @@ function App() {
         // As in the app: ⌘P this channel, ⌘⇧P all of Buzz.
         event.preventDefault();
         setScope(event.shiftKey || !currentChannelId ? "buzz" : "channel");
+        setSource(undefined);
         setOpen(true);
       }
     };
@@ -195,6 +227,11 @@ function App() {
         currentChannelId={currentChannelId}
         scope={scope}
         onScopeChange={setScope}
+        source={source}
+        onSourceClose={() => {
+          setSource(undefined);
+          setScope("buzz");
+        }}
         openMessage={setOpened}
       />
     </main>
