@@ -1230,6 +1230,15 @@ Quitting Buzz also turns it off.
   see it. Choose a file to open its diff beside the chat. It skips agents on
   other computers and remote agents, and keeps the latest 300 turns on this
   device.
+- **Smart routing** is an optional plugin, off by default, that needs a
+  decisions provider (Builderlab or a TypeSafe key). When you send a channel
+  message without tagging anyone, Jev picks which of your agents on this
+  computer answers, or none, and wakes it. For a top-level message, Jev also
+  decides where the answer goes: the top level in a working conversation, a
+  thread in a shared channel, or the thread of an earlier message you follow up
+  on. A reply in a thread stays in that thread. When you tag a Goose agent, Jev
+  only decides where it answers. The pick and the place show beside the
+  message's time.
 - **Activity preview**: with a mouse or trackpad, rest the pointer on
   **Activity** in the Messages sidebar to see recent mentions, DMs, thread replies, and reactions
   without opening the Activity page. Clicking a conversation opens it directly;

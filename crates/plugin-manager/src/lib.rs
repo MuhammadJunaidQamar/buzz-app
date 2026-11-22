@@ -605,6 +605,10 @@ fn bundled_manifests_for(gateway: Option<&gateway::Native>) -> Vec<Manifest> {
             "../../../src/bundled/relay-notes/manifest.json"
         ))
         .expect("relay notes manifest"),
+        serde_json::from_str(include_str!(
+            "../../../src/bundled/smart-routing/manifest.json"
+        ))
+        .expect("smart routing manifest"),
         serde_json::from_str(include_str!("../../../src/bundled/typesafe/manifest.json"))
             .expect("typesafe manifest"),
         serde_json::from_str(include_str!(
