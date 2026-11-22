@@ -190,6 +190,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
         agents={agents}
         communities={ctx.communityReader}
         membership={membership}
+        seen={ctx.reflect.get("seen")}
       />
     ),
   });

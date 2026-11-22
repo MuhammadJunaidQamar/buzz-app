@@ -1283,8 +1283,10 @@ Quitting Buzz also turns it off.
   that conversation when you go to another conversation or page and come back,
   until you close it. Reloading Buzz does not restore it. The Terminal drawer
   closes when you leave the conversation.
-- **Inline**: **Settings → Appearance → Open threads in → Inline** opens
-  what you choose from a message over the view it is in instead of in a tab.
+- **Inline**: by default, what you choose from a message opens over the view
+  it is in instead of in a tab. **Settings → Appearance → Open threads in**
+  changes it to the side or main pane. The first inline thread introduces
+  itself in two steps, and its toggle turns inline off.
   A thread from the timeline opens over the conversation's message box, with
   the thread's own reply box in its place; a conversation has one at a time,
   and opening another replaces it. Profiles from avatars and names, pull
@@ -1299,13 +1301,16 @@ Quitting Buzz also turns it off.
   in other channels still open as tabs. Back closes what opened last and
   Forward opens it again; ✕ or Escape closes it for good. Leaving the channel
   leaves it behind, and Back brings it back. Reloading Buzz restores it.
+  Images and videos open over the view they were opened from too, across its
+  panes, with their comments and comment box beside them. Media is a viewer:
+  Back and Forward skip it, and ✕ or Escape closes it.
 - **Details messages**: a long message an agent sends for people shows its
   first paragraph, its brief, in the conversation. **Show more** reads all of
   it over the message box of the view it is in: the conversation, an inline
   thread or a thread tab, or as a dialog where that view has no message box.
   Back closes it first (over an inline thread, before the thread), ✕, Escape
   or sending a message from that box closes it for good, and reloading Buzz
-  restores it while its message is loaded.
+  restores it, even when its message isn't on screen.
 - **Renamed thread tabs**: a name you or an agent give a thread tab is saved on
   this device for the account and community until the tab is closed. The
   thread's tab shows it again when it reopens after switching channels,
