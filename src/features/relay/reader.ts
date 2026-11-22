@@ -22,6 +22,8 @@ export type ReadOptions = {
    * whatever their kinds, so a readable one the session does not know yet is
    * not dropped. It waits for discovery: before it, the read fails. */
   resolveChannels?: boolean;
+  /** An open screen waits on this read: it starts ahead of all queued work. */
+  urgent?: boolean;
 };
 /** Finite, verified event reads. No retained event cache or claim of live freshness. */
 export type RelayReader = {
@@ -52,6 +54,7 @@ type Job = {
   key: string;
   filters: readonly ReadFilter[];
   priority: Priority;
+  urgent: boolean;
   controller: AbortController;
   consumers: Set<Consumer>;
   timer: ReturnType<typeof setTimeout>;
@@ -159,10 +162,14 @@ export function createRelayReader(
     if (closed || suspended || recovering || !transport) return;
     while (!closed && !suspended && !recovering) {
       const active = [...jobs.values()].filter((job) => job.running);
-      if (active.length >= 3) return;
-      const background = active.some((job) => job.priority === "background");
       const queued = [...jobs.values()].filter((job) => !job.running);
+      const urgent = queued.find((job) => job.urgent);
+      // Three reads at a time, and one more lane only for an urgent read,
+      // so a screen never waits for a slot behind ordinary work.
+      if (active.length >= (urgent ? 4 : 3)) return;
+      const background = active.some((job) => job.priority === "background");
       const job =
+        urgent ??
         queued.find((job) => job.priority === "foreground") ??
         (!background ? queued[0] : undefined);
       if (!job) return;
@@ -248,6 +255,7 @@ export function createRelayReader(
       priority = "foreground",
       fresh = false,
       deadlineMs = timeoutMs,
+      urgent = false,
     }: ReadOptions = {},
     snapshot = false,
     profiles?: Job["profiles"],
@@ -332,6 +340,7 @@ export function createRelayReader(
         key,
         filters: requestFilters,
         priority,
+        urgent,
         controller: new AbortController(),
         consumers: new Set(),
         running: false,
@@ -349,8 +358,10 @@ export function createRelayReader(
         ),
       };
       jobs.set(key, job);
-    } else if (!job.running && priority === "foreground")
-      job.priority = priority;
+    } else if (!job.running) {
+      if (priority === "foreground") job.priority = priority;
+      if (urgent) job.urgent = true;
+    }
     const owned = job;
     return new Promise<ReadValue>((resolve, reject) => {
       const release = () => signal?.removeEventListener("abort", abort);

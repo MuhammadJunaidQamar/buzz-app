@@ -2570,8 +2570,7 @@ export function createUnread({
     const reset = resets;
     const current = () => !closed && generation === epoch && reset === resets;
     refresh = (async () => {
-      await reads.ensure();
-      if (!current()) return;
+      const ensured = reads.ensure();
       const ids = channels
         .list()
         .channels.filter(
@@ -2580,6 +2579,46 @@ export function createUnread({
         .map((channel) => channel.id)
         // Batches key their marks, so they must not move when a channel is renamed.
         .sort();
+      // The relay caps aggregate explicit #h values at 128 per request.
+      // Keep roster scope: an unscoped read also includes unjoined open channels.
+      // Each bounded batch owns its queue-inclusive deadline; optional
+      // profiles must not block the initial user-visible observation.
+      const abandoned = new AbortController();
+      const readBatch = (offset: number) => {
+        const batch = ids.slice(offset, offset + 128);
+        const key = batch.join(",");
+        const mark = repaired.get(key);
+        const asked = Math.floor(Date.now() / 1000);
+        const signal = AbortSignal.any([
+          lifetime.signal,
+          abandoned.signal,
+          AbortSignal.timeout(10000),
+        ]);
+        const result = reader.read(
+          [
+            {
+              kinds: [9, 40002, 40008],
+              "#h": batch,
+              include_aux: true,
+              limit: REPAIR_LIMIT,
+              ...(mark === undefined
+                ? {}
+                : { since: Math.max(0, mark - REPAIR_OVERLAP) }),
+            },
+          ],
+          { signal, priority, urgent: priority === "foreground" },
+        );
+        return { batch, key, mark, asked, result };
+      };
+      // A batch reads only channel IDs, so the first goes out beside read
+      // state; nothing it returns is evaluated before read state is ready.
+      const first = ids.length ? readBatch(0) : undefined;
+      first?.result.catch(() => {});
+      await ensured;
+      if (!current()) {
+        abandoned.abort();
+        return;
+      }
       if (!ids.length) {
         freshness = "observed";
         owing = false;
@@ -2588,33 +2627,15 @@ export function createUnread({
         return;
       }
       try {
-        // The relay caps aggregate explicit #h values at 128 per request.
-        // Keep roster scope: an unscoped read also includes unjoined open channels.
-        // Each bounded batch owns its queue-inclusive deadline after marker sync;
-        // optional profiles must not block the initial user-visible observation.
         for (let offset = 0; offset < ids.length; offset += 128) {
-          const batch = ids.slice(offset, offset + 128);
-          const key = batch.join(",");
-          const mark = repaired.get(key);
-          const asked = Math.floor(Date.now() / 1000);
-          const signal = AbortSignal.any([
-            lifetime.signal,
-            AbortSignal.timeout(10000),
-          ]);
-          const result = await reader.read(
-            [
-              {
-                kinds: [9, 40002, 40008],
-                "#h": batch,
-                include_aux: true,
-                limit: REPAIR_LIMIT,
-                ...(mark === undefined
-                  ? {}
-                  : { since: Math.max(0, mark - REPAIR_OVERLAP) }),
-              },
-            ],
-            { signal, priority },
-          );
+          const {
+            batch,
+            key,
+            mark,
+            asked,
+            result: reading,
+          } = (offset === 0 && first) || readBatch(offset);
+          const result = await reading;
           // An overflow, refresh or cache clear while this read was out
           // discarded what the mark stands for: an overflow waits for refresh,
           // a refresh or cache clear reads again.

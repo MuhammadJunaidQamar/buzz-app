@@ -1133,9 +1133,12 @@ export function createChannelStore(
     const filters = [windowFilter(channelId, cursor)];
     if (withNotices && !cursor)
       filters.push(noticeFilter(channelId, source.relayAuthor, null));
+    // The open channel's screen waits on its head.
+    const urgent = !cursor && channelId === current;
     const read = (signal?: AbortSignal) =>
       source.read(filters, {
         ...settings,
+        ...(urgent ? { urgent } : {}),
         ...(signal ? { signal } : {}),
       });
     // Head reads belong to session recovery; only manual pagination needs a
@@ -2209,6 +2212,10 @@ export function createChannelStore(
     let generation = epoch;
     let controller = new AbortController();
     controllers.add(controller);
+    // Until the list is verified, every channel that opens waits on it.
+    const urgent = () =>
+      list.status !== "ready" ||
+      list.channels.some((channel) => channel.cached);
     const started = discovery.rosterVersions();
     const overflowRevision = discovery.overflowRevision;
     let readingRoster = true;
@@ -2256,7 +2263,11 @@ export function createChannelStore(
                   : {}),
               },
             ],
-            { signal: controller.signal, deadlineMs: LARGE_READ_DEADLINE_MS },
+            {
+              signal: controller.signal,
+              deadlineMs: LARGE_READ_DEADLINE_MS,
+              urgent: urgent(),
+            },
           );
           if (disposed || generation !== epoch) return;
           scannedBytes += listByteSize(rosters);
@@ -2314,7 +2325,11 @@ export function createChannelStore(
             },
           ],
           // A page of full rosters can approach the read budget.
-          { signal: controller.signal, deadlineMs: LARGE_READ_DEADLINE_MS },
+          {
+            signal: controller.signal,
+            deadlineMs: LARGE_READ_DEADLINE_MS,
+            urgent: urgent(),
+          },
         );
         if (disposed || generation !== epoch) return;
         scannedBytes += listByteSize(rosters);

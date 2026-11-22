@@ -1198,6 +1198,7 @@ export function createReadState({
                 signal,
                 priority,
                 fresh: true,
+                urgent: priority === "foreground",
               })
             : await reader.read(
                 [
@@ -1208,7 +1209,7 @@ export function createReadState({
                     limit: 500,
                   },
                 ],
-                { signal, priority },
+                { signal, priority, urgent: priority === "foreground" },
               );
         await ingest(events, signal, generation);
         if (closed || generation !== epoch) return;

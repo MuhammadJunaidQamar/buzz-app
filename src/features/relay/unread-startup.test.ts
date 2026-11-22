@@ -155,7 +155,8 @@ it("initial unread markers and evidence bypass held optional profiles without ca
     });
   try {
     await h.session.unread.ensure();
-    expect(h.trace.map(({ kind }) => kind)).toEqual([0, 30078, 9]);
+    // Evidence reads beside the markers rather than after them.
+    expect(h.trace.map(({ kind }) => kind)).toEqual([0, 9, 30078]);
     expect(profileFinished).toBe(false);
     expect(h.profileSignals).toHaveLength(1);
     expect(h.profileSignals[0]?.aborted).toBe(false);
@@ -166,7 +167,7 @@ it("initial unread markers and evidence bypass held optional profiles without ca
   }
 }, 15000);
 
-it("evidence gets its own deadline after a failed marker read; marker errors stay visible", async () => {
+it("evidence reads beside the markers on its own deadline; marker errors stay visible", async () => {
   const h = setup();
   // Control the caller deadline directly instead of coupling this test to
   // Node's native timeout clock or the reader's separate job timer.
@@ -180,16 +181,16 @@ it("evidence gets its own deadline after a failed marker read; marker errors sta
   try {
     const done = h.session.unread.ensure();
     await vi.waitFor(() =>
-      expect(h.trace.map(({ kind }) => kind)).toEqual([30078]),
+      expect(h.trace.map(({ kind }) => kind)).toEqual([9, 30078]),
     );
-    expect(deadlines).toHaveLength(1);
+    expect(deadlines).toHaveLength(2);
     const marker = deadlines[0];
     assert(marker);
     marker.abort(new DOMException("Marker deadline expired", "TimeoutError"));
     await done;
     expect(deadlines).toHaveLength(2);
     expect(deadlines[1]?.signal.aborted).toBe(false);
-    expect(h.trace.map(({ kind }) => kind)).toEqual([30078, 9]);
+    expect(h.trace.map(({ kind }) => kind)).toEqual([9, 30078]);
     expect(h.snapshot()).toMatchObject({
       observedCount: 1,
       freshness: "observed",
@@ -877,7 +878,7 @@ it("concurrent ensure callers share the active marker/evidence work", async () =
   const release = h.holdMarker();
   const first = h.session.unread.ensure();
   await vi.waitFor(() =>
-    expect(h.trace.map(({ kind }) => kind)).toEqual([30078]),
+    expect(h.trace.map(({ kind }) => kind)).toEqual([9, 30078]),
   );
   let finished = false;
   const second = h.session.unread.ensure().then(() => {
@@ -887,7 +888,7 @@ it("concurrent ensure callers share the active marker/evidence work", async () =
   expect(finished).toBe(false);
   release();
   await Promise.all([first, second]);
-  expect(h.trace.map(({ kind }) => kind)).toEqual([30078, 9]);
+  expect(h.trace.map(({ kind }) => kind)).toEqual([9, 30078]);
   expect(h.snapshot().observedCount).toBe(1);
 });
 
@@ -1303,13 +1304,14 @@ it("a repair that fills the evidence window keeps batching and samples", async (
 });
 
 it.each(["clear", "dispose", "revoke"])(
-  "no evidence dispatch after %s while markers are pending",
+  "after %s, evidence read beside pending markers is dropped and no later batch is dispatched",
   async (boundary) => {
     const h = setup(129);
     const release = h.holdMarker();
     const repair = h.session.unread.ensure();
+    // Only the first batch reads beside the markers.
     await vi.waitFor(() =>
-      expect(h.trace.map(({ kind }) => kind)).toEqual([30078]),
+      expect(h.trace.map(({ kind }) => kind)).toEqual([9, 30078]),
     );
     if (boundary === "dispose") h.dispose();
     else if (boundary === "clear") await h.clearCache();
@@ -1317,23 +1319,25 @@ it.each(["clear", "dispose", "revoke"])(
     release();
     await repair;
     if (boundary === "dispose") {
-      expect(h.trace.map(({ kind }) => kind)).toEqual([30078]);
+      expect(h.trace.map(({ kind }) => kind)).toEqual([9, 30078]);
       return;
     }
-    // Only a fresh observation is dispatched: after a clear it reads every
-    // channel once, after a revoke it leaves the revoked channel out.
+    // Only a fresh observation follows: after a clear it reads every channel
+    // once, after a revoke it leaves the revoked channel out.
     await h.session.unread.ensure();
     const evidence = h.query.mock.calls
       .map(([filters]) => filters[0])
       .filter((filter) => filter?.kinds?.includes(9));
+    const sorted = [...h.ids].sort();
+    expect(evidence[0]?.["#h"]).toEqual(sorted.slice(0, 128));
+    const fresh = evidence.slice(1);
     if (boundary === "clear") {
-      expect(evidence.flatMap((filter) => filter?.["#h"] ?? [])).toEqual(
-        [...h.ids].sort(),
-      );
+      expect(fresh.flatMap((filter) => filter?.["#h"] ?? [])).toEqual(sorted);
       return;
     }
-    expect(evidence).toHaveLength(1);
-    expect(evidence[0]?.["#h"]).not.toContain("other");
+    expect(fresh).toHaveLength(1);
+    expect(fresh[0]?.["#h"]).not.toContain("other");
+    expect(h.snapshot().observedCount).toBeNull();
   },
 );
 
@@ -1364,7 +1368,7 @@ it("explicit refresh bypasses optional profiles for both markers and evidence", 
   try {
     await h.session.unread.refresh();
     expect(h.profileSignals[0]?.aborted).toBe(false);
-    expect(h.trace.map(({ kind }) => kind)).toEqual([30078, 9, 0, 30078, 9]);
+    expect(h.trace.map(({ kind }) => kind)).toEqual([9, 30078, 0, 30078, 9]);
   } finally {
     release();
     await profiles;
